@@ -1,3 +1,1 @@
-# talweg
-
-The natural path through complex thoughts. Local-first, open-source visual thinking canvas
+Under active development. Star the repo to follow the progress
