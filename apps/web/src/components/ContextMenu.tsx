@@ -158,7 +158,7 @@ export function ContextMenu({
 
   const renderSection = (title: string, entries: MenuEntry[]) => (
     <div className="py-1">
-      <div className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-neutral-500 font-mono select-none">
+      <div className="px-2.5 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-neutral-600 select-none">
         {title}
       </div>
       {entries.map((entry) => (
@@ -169,7 +169,7 @@ export function ContextMenu({
             entry.onSelect();
             onClose();
           }}
-          className="w-full flex items-center gap-2 px-3 py-1.5 rounded text-[11px] text-neutral-300 hover:text-white hover:bg-neutral-800 transition cursor-pointer"
+          className="w-full flex items-center gap-2 px-2.5 py-1 rounded-[3px] mx-1 text-[11px] text-neutral-300 hover:text-white hover:bg-white/[0.05] transition cursor-pointer"
         >
           <entry.icon className="w-3.5 h-3.5 text-neutral-500" />
           <span>{entry.label}</span>
@@ -188,7 +188,7 @@ export function ContextMenu({
         e.stopPropagation();
       }}
       style={{ left: pos.left, top: pos.top }}
-      className="fixed z-50 min-w-[180px] bg-neutral-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-2xl select-none text-xs divide-y divide-white/5"
+      className="fixed z-50 min-w-[172px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none text-xs divide-y divide-white/[0.06]"
     >
       {renderSection(t("contextMenu.add"), addEntries)}
       {selectionEntries.length > 0 && renderSection(t("contextMenu.selection"), selectionEntries)}

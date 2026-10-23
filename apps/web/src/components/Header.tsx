@@ -25,6 +25,15 @@ interface HeaderProps {
   onSave?: () => void;
 }
 
+const MODES: readonly {
+  id: CanvasMode;
+  icon: typeof StickyNote;
+}[] = [
+  { id: "whiteboard", icon: StickyNote },
+  { id: "diagrams", icon: Network },
+  { id: "mindmap", icon: Share2 },
+];
+
 export function Header({
   document,
   mode,
@@ -35,11 +44,19 @@ export function Header({
   onResetZoom,
   onSave,
 }: HeaderProps) {
-  const { t, language, toggleLanguage } = useTranslation();
+  const { t, toggleLanguage } = useTranslation();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!modeMenuOpen) return;
@@ -59,14 +76,6 @@ export function Header({
     };
   }, [modeMenuOpen]);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const showToast = (message: string) => {
     setToastMessage(message);
     if (toastTimeoutRef.current) {
@@ -80,7 +89,7 @@ export function Header({
 
   const handleSave = () => {
     onSave?.();
-    showToast(t("actions.savedLocally") || "Документ сохранен локально");
+    showToast(t("actions.savedLocally"));
   };
 
   const handleShare = async () => {
@@ -97,7 +106,7 @@ export function Header({
     } catch {
       // Ignore clipboard write errors in restricted contexts
     }
-    showToast(t("actions.linkCopied") || "Ссылка скопирована");
+    showToast(t("actions.linkCopied"));
   };
 
   const handleExport = () => {
@@ -106,58 +115,47 @@ export function Header({
   };
 
   const zoomPercent = Math.round((camera?.zoom ?? 1.0) * 100);
+  const ActiveModeIcon = MODES.find((m) => m.id === mode)?.icon ?? StickyNote;
 
   return (
-    <header className="h-10 border-b border-white/[0.08] bg-neutral-950/90 backdrop-blur-md px-3 flex items-center justify-between z-30 select-none text-xs">
-      {/* Left: Brand, Document Title & Local-First Badge */}
-      <div className="flex items-center gap-2.5">
+    <header className="h-9 border-b border-white/[0.08] bg-[#0e0f11] px-2 flex items-center justify-between z-30 select-none">
+      <div className="flex items-center gap-1 min-w-0">
         <button
           type="button"
           onClick={onOpenDashboard}
-          className="flex items-center gap-1.5 hover:bg-white/[0.06] px-1.5 py-1 -ml-1 rounded transition cursor-pointer group"
+          className="flex items-center gap-1.5 h-7 px-1.5 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("dashboard.title")}
         >
-          <img
-            src="/favicon.svg"
-            alt="Talweg"
-            className="w-4 h-4 rounded shadow-sm opacity-90 group-hover:opacity-100 transition"
-          />
-          <span className="font-semibold text-xs tracking-tight text-neutral-200 hidden sm:inline font-mono group-hover:text-white transition">
-            Talweg
-          </span>
+          <img src="/favicon.svg" alt="" className="w-4 h-4" />
+          <span className="hidden sm:inline text-[11px] font-medium tracking-tight">Talweg</span>
         </button>
 
-        <div className="h-3 w-px bg-white/10" />
+        <div className="h-4 w-px bg-white/[0.08]" />
 
         <input
           type="text"
-          value={document?.name ?? "Talweg Canvas"}
+          value={document?.name ?? ""}
           onChange={(e) => onUpdateTitle?.(e.target.value)}
           placeholder={t("canvas.titlePlaceholder")}
-          className="bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.08] text-xs font-mono text-neutral-300 px-1.5 py-0.5 rounded border border-transparent focus:border-white/20 outline-none max-w-[140px] sm:max-w-[200px] truncate transition"
+          className="bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-[11px] text-neutral-300 focus:text-neutral-100 px-1.5 h-7 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
         />
-
-        <div className="hidden lg:flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Local-First</span>
-        </div>
       </div>
 
-      {/* Center: Mode Picker (single dropdown instead of a segmented row) */}
       <div ref={modeMenuRef} className="relative">
         <button
           type="button"
           onClick={() => {
             setModeMenuOpen((open) => !open);
           }}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-900/90 border border-white/10 shadow-sm text-[11px] font-medium text-neutral-200 hover:bg-neutral-800 transition cursor-pointer"
-          title={t(`tooltips.mode${mode.charAt(0).toUpperCase()}${mode.slice(1)}`)}
+          className={`flex items-center gap-1.5 h-7 px-2 rounded text-[11px] transition cursor-pointer ${
+            modeMenuOpen
+              ? "bg-white/[0.07] text-neutral-100"
+              : "text-neutral-300 hover:bg-white/[0.05] hover:text-neutral-100"
+          }`}
           aria-haspopup="menu"
           aria-expanded={modeMenuOpen}
         >
-          {mode === "whiteboard" && <StickyNote className="w-3 h-3" />}
-          {mode === "diagrams" && <Network className="w-3 h-3" />}
-          {mode === "mindmap" && <Share2 className="w-3 h-3" />}
+          <ActiveModeIcon className="w-3.5 h-3.5 text-amber-400/90" />
           <span>{t(`modes.${mode}`)}</span>
           <ChevronDown className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`} />
         </button>
@@ -166,38 +164,35 @@ export function Header({
           <div
             role="menu"
             data-testid="mode-picker-menu"
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 min-w-[260px] bg-neutral-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-2xl select-none z-50 overflow-hidden"
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[240px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none z-50 py-1"
           >
-            {(["whiteboard", "diagrams", "mindmap"] as const).map((candidate) => {
-              const tooltipKey = `tooltips.mode${candidate.charAt(0).toUpperCase()}${candidate.slice(1)}`;
+            {MODES.map((candidate) => {
+              const Icon = candidate.icon;
+              const isActive = mode === candidate.id;
               return (
                 <button
-                  key={candidate}
+                  key={candidate.id}
                   type="button"
                   role="menuitemradio"
-                  aria-checked={mode === candidate}
+                  aria-checked={isActive}
                   onClick={() => {
-                    onModeChange(candidate);
+                    onModeChange(candidate.id);
                     setModeMenuOpen(false);
                   }}
-                  className={`w-full flex items-start gap-2.5 px-3 py-2 text-left transition cursor-pointer ${
-                    mode === candidate
-                      ? "bg-neutral-800/80 text-neutral-100"
-                      : "text-neutral-300 hover:bg-neutral-800/50 hover:text-white"
+                  className={`w-full flex items-start gap-2.5 px-2.5 py-1.5 text-left transition cursor-pointer ${
+                    isActive ? "bg-white/[0.05]" : "hover:bg-white/[0.04]"
                   }`}
                 >
-                  <span className="mt-0.5">
-                    {candidate === "whiteboard" && <StickyNote className="w-3.5 h-3.5 text-amber-400/80" />}
-                    {candidate === "diagrams" && <Network className="w-3.5 h-3.5 text-sky-400/80" />}
-                    {candidate === "mindmap" && <Share2 className="w-3.5 h-3.5 text-indigo-400/80" />}
-                  </span>
+                  <Icon className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-amber-400/90" : "text-neutral-500"}`} />
                   <span className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium">{t(`modes.${candidate}`)}</span>
-                    <span className="text-[10px] text-neutral-500 font-mono leading-snug">
-                      {t(tooltipKey)}
+                    <span className={`text-[11px] ${isActive ? "text-neutral-100" : "text-neutral-300"}`}>
+                      {t(`modes.${candidate.id}`)}
+                    </span>
+                    <span className="text-[10px] text-neutral-500 leading-snug">
+                      {t(`tooltips.mode${candidate.id.charAt(0).toUpperCase()}${candidate.id.slice(1)}`)}
                     </span>
                   </span>
-                  {mode === candidate && <Check className="w-3.5 h-3.5 text-emerald-400 ml-auto mt-0.5" />}
+                  {isActive && <Check className="w-3.5 h-3.5 text-amber-400/90 ml-auto mt-0.5" />}
                 </button>
               );
             })}
@@ -205,42 +200,26 @@ export function Header({
         )}
       </div>
 
-      {/* Right: Technical Badges, Zoom Monospace & Actions */}
-      <div className="flex items-center gap-1.5">
-        {mode === "mindmap" && (
-          <div className="hidden xl:block text-[10px] text-neutral-400 font-mono bg-neutral-900/80 px-2 py-0.5 rounded border border-white/10">
-            {t("tooltips.mindmapTip")}
-          </div>
-        )}
-
-        {mode === "diagrams" && (
-          <div className="hidden xl:block text-[10px] text-sky-400/90 font-mono bg-sky-950/40 px-2 py-0.5 rounded border border-sky-800/40">
-            16px Grid Snap
-          </div>
-        )}
-
-        {/* Monospace Zoom Readout / Reset Button */}
+      <div className="flex items-center gap-px">
         <button
           type="button"
           onClick={onResetZoom}
-          className="flex items-center font-mono text-[11px] text-neutral-400 hover:text-neutral-100 px-2 py-0.5 rounded bg-neutral-900/80 hover:bg-neutral-800 border border-white/10 hover:border-white/20 transition cursor-pointer select-none active:scale-95 group relative"
+          className="flex items-center justify-center h-7 min-w-[46px] px-1 rounded font-mono text-[11px] text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("actions.resetZoom")}
           aria-label={t("actions.resetZoom")}
         >
-          <span>{zoomPercent}%</span>
-          <div className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl z-50">
-            {t("actions.resetZoom")}
-          </div>
+          {zoomPercent}%
         </button>
+
+        <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
         <button
           type="button"
           onClick={toggleLanguage}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono text-neutral-300 hover:bg-neutral-800 border border-white/10 transition cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.langToggle")}
         >
-          <Languages className="w-3 h-3 text-neutral-400" />
-          <span className="uppercase">{language}</span>
+          <Languages className="w-3.5 h-3.5" />
         </button>
 
         <button
@@ -248,46 +227,41 @@ export function Header({
           onClick={() => {
             void handleShare();
           }}
-          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-white/10 shadow-sm transition cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.share")}
         >
-          <Share2 className="w-3 h-3 text-neutral-300" />
-          <span className="hidden sm:inline">{t("actions.share")}</span>
+          <Share2 className="w-3.5 h-3.5" />
         </button>
 
         <button
           type="button"
           onClick={handleSave}
-          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-white/10 shadow-sm transition cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.save")}
         >
-          <Save className="w-3 h-3 text-neutral-300" />
-          <span className="hidden sm:inline">{t("actions.save")}</span>
+          <Save className="w-3.5 h-3.5" />
         </button>
 
         <button
           type="button"
           onClick={handleExport}
-          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-white/10 shadow-sm transition cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.export")}
         >
-          <Download className="w-3 h-3" />
-          <span className="hidden sm:inline">{t("actions.exportPng")}</span>
+          <Download className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Floating Toast Notification */}
       {toastMessage && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-900/95 border border-white/10 shadow-2xl backdrop-blur-md text-xs font-mono text-neutral-200 pointer-events-none transition-all duration-200 animate-in fade-in"
+          className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-2.5 h-7 rounded bg-[#16181c] border border-white/[0.08] shadow-md text-[11px] text-neutral-300 pointer-events-none"
         >
-          <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+          <Check className="w-3 h-3 text-neutral-500" />
           <span>{toastMessage}</span>
         </div>
       )}
     </header>
   );
 }
-

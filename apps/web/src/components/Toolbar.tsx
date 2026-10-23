@@ -31,6 +31,50 @@ interface ToolbarProps {
   onAddMindmapSibling?: () => void;
 }
 
+const tooltipClass =
+  "absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-[#1b1e23] text-neutral-300 text-[10px] border border-white/[0.08] opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-50";
+
+function ToolbarButton({
+  onClick,
+  label,
+  tooltip,
+  active,
+  disabled,
+  danger,
+  children,
+}: {
+  onClick?: (() => void) | undefined;
+  label: string;
+  tooltip: string;
+  active?: boolean;
+  disabled?: boolean;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={active}
+      title={tooltip}
+      className={`group relative flex items-center justify-center w-7 h-7 rounded transition ${
+        active
+          ? "bg-white/[0.09] text-neutral-50"
+          : disabled
+            ? "text-neutral-600 cursor-default"
+            : danger
+              ? "text-neutral-400 hover:text-rose-300 hover:bg-rose-400/10 cursor-pointer"
+              : "text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] cursor-pointer"
+      }`}
+    >
+      {children}
+      <span className={tooltipClass}>{tooltip}</span>
+    </button>
+  );
+}
+
 export function Toolbar({
   activeTool,
   mode,
@@ -46,220 +90,86 @@ export function Toolbar({
 }: ToolbarProps) {
   const { t } = useTranslation();
 
-  // Mode-specialized primary tools
   const tools = (() => {
     const baseTools = [
-      {
-        id: "select" as ToolType,
-        label: t("tools.select"),
-        tooltip: t("tooltips.select"),
-        icon: MousePointer2,
-      },
-      {
-        id: "pan" as ToolType,
-        label: t("tools.pan"),
-        tooltip: t("tooltips.pan"),
-        icon: Hand,
-      },
+      { id: "select" as ToolType, label: t("tools.select"), tooltip: t("tooltips.select"), icon: MousePointer2 },
+      { id: "pan" as ToolType, label: t("tools.pan"), tooltip: t("tooltips.pan"), icon: Hand },
     ];
 
     if (mode === "diagrams") {
       return [
         ...baseTools,
-        {
-          id: "rectangle" as ToolType,
-          label: t("tools.rectangle"),
-          tooltip: t("tooltips.rectangle"),
-          icon: Square,
-        },
-        {
-          id: "diamond" as ToolType,
-          label: t("tools.diamond"),
-          tooltip: t("tooltips.diamond"),
-          icon: Diamond,
-        },
-        {
-          id: "capsule" as ToolType,
-          label: t("tools.capsule"),
-          tooltip: t("tooltips.capsule"),
-          icon: Pill,
-        },
-        {
-          id: "cylinder" as ToolType,
-          label: t("tools.cylinder"),
-          tooltip: t("tooltips.cylinder"),
-          icon: Database,
-        },
-        {
-          id: "arrow" as ToolType,
-          label: t("tools.arrow"),
-          tooltip: t("tooltips.arrow"),
-          icon: ArrowUpRight,
-        },
+        { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
+        { id: "diamond" as ToolType, label: t("tools.diamond"), tooltip: t("tooltips.diamond"), icon: Diamond },
+        { id: "capsule" as ToolType, label: t("tools.capsule"), tooltip: t("tooltips.capsule"), icon: Pill },
+        { id: "cylinder" as ToolType, label: t("tools.cylinder"), tooltip: t("tooltips.cylinder"), icon: Database },
+        { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
       ];
     }
 
     if (mode === "mindmap") {
       return [
         ...baseTools,
-        {
-          id: "rectangle" as ToolType,
-          label: t("tools.rectangle"),
-          tooltip: t("tooltips.rectangle"),
-          icon: Square,
-        },
-        {
-          id: "arrow" as ToolType,
-          label: t("tools.arrow"),
-          tooltip: t("tooltips.arrow"),
-          icon: ArrowUpRight,
-        },
+        { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
+        { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
       ];
     }
 
-    // Default Whiteboard Mode
     return [
       ...baseTools,
-      {
-        id: "sticker" as ToolType,
-        label: t("tools.sticker"),
-        tooltip: t("tooltips.sticker"),
-        icon: StickyNote,
-      },
-      {
-        id: "card" as ToolType,
-        label: t("tools.card"),
-        tooltip: t("tooltips.card"),
-        icon: CreditCard,
-      },
-      {
-        id: "rectangle" as ToolType,
-        label: t("tools.rectangle"),
-        tooltip: t("tooltips.rectangle"),
-        icon: Square,
-      },
-      {
-        id: "arrow" as ToolType,
-        label: t("tools.arrow"),
-        tooltip: t("tooltips.arrow"),
-        icon: ArrowUpRight,
-      },
+      { id: "sticker" as ToolType, label: t("tools.sticker"), tooltip: t("tooltips.sticker"), icon: StickyNote },
+      { id: "card" as ToolType, label: t("tools.card"), tooltip: t("tooltips.card"), icon: CreditCard },
+      { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
+      { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
     ];
   })();
 
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 bg-neutral-900/90 backdrop-blur-md border border-white/10 p-1 rounded-lg shadow-2xl select-none text-xs">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-px bg-[#131518] border border-white/[0.08] rounded shadow-md select-none">
       {tools.map((tool) => {
         const Icon = tool.icon;
-        const isActive = activeTool === tool.id;
-
         return (
-          <button
+          <ToolbarButton
             key={tool.id}
-            type="button"
             onClick={() => {
               onSelectTool(tool.id);
             }}
-            className={`flex items-center justify-center w-8 h-8 rounded transition cursor-pointer relative group ${
-              isActive
-                ? "bg-neutral-800 text-neutral-100 border border-white/15 shadow-sm"
-                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60"
-            }`}
-            title={tool.tooltip}
-            aria-label={tool.label}
+            label={tool.label}
+            tooltip={tool.tooltip}
+            active={activeTool === tool.id}
           >
             <Icon className="w-4 h-4" />
-            <div className="absolute -top-8 px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl">
-              {tool.tooltip}
-            </div>
-          </button>
+          </ToolbarButton>
         );
       })}
 
-      {/* Mindmap specific quick action buttons */}
       {mode === "mindmap" && hasSelection && (
         <>
-          <div className="h-4 w-px bg-white/10 mx-0.5" />
-          <button
-            type="button"
-            onClick={onAddMindmapChild}
-            className="flex items-center justify-center w-8 h-8 rounded text-indigo-400 hover:bg-indigo-950/50 hover:text-indigo-200 transition cursor-pointer relative group"
-            title={t("actions.addChild")}
-          >
+          <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
+          <ToolbarButton onClick={onAddMindmapChild} label={t("actions.addChild")} tooltip={t("actions.addChild")}>
             <CornerDownRight className="w-4 h-4" />
-            <div className="absolute -top-8 px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl">
-              {t("actions.addChild")}
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={onAddMindmapSibling}
-            className="flex items-center justify-center w-8 h-8 rounded text-indigo-400 hover:bg-indigo-950/50 hover:text-indigo-200 transition cursor-pointer relative group"
-            title={t("actions.addSibling")}
-          >
+          </ToolbarButton>
+          <ToolbarButton onClick={onAddMindmapSibling} label={t("actions.addSibling")} tooltip={t("actions.addSibling")}>
             <GitBranch className="w-4 h-4" />
-            <div className="absolute -top-8 px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl">
-              {t("actions.addSibling")}
-            </div>
-          </button>
+          </ToolbarButton>
         </>
       )}
 
-      <div className="h-4 w-px bg-white/10 mx-0.5" />
+      <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
-      {/* Undo & Redo */}
-      <button
-        type="button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        className={`flex items-center justify-center w-8 h-8 rounded transition relative group ${
-          canUndo
-            ? "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60 cursor-pointer"
-            : "text-neutral-600 cursor-not-allowed"
-        }`}
-        title={t("tooltips.undo")}
-        aria-label={t("actions.undo")}
-      >
+      <ToolbarButton onClick={onUndo} disabled={!canUndo} label={t("actions.undo")} tooltip={t("tooltips.undo")}>
         <Undo2 className="w-4 h-4" />
-        <div className="absolute -top-8 px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl">
-          {t("tooltips.undo")}
-        </div>
-      </button>
-
-      <button
-        type="button"
-        onClick={onRedo}
-        disabled={!canRedo}
-        className={`flex items-center justify-center w-8 h-8 rounded transition relative group ${
-          canRedo
-            ? "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60 cursor-pointer"
-            : "text-neutral-600 cursor-not-allowed"
-        }`}
-        title={t("tooltips.redo")}
-        aria-label={t("actions.redo")}
-      >
+      </ToolbarButton>
+      <ToolbarButton onClick={onRedo} disabled={!canRedo} label={t("actions.redo")} tooltip={t("tooltips.redo")}>
         <Redo2 className="w-4 h-4" />
-        <div className="absolute -top-8 px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl">
-          {t("tooltips.redo")}
-        </div>
-      </button>
+      </ToolbarButton>
 
-      {/* Delete button (when selection exists) */}
       {hasSelection && (
         <>
-          <div className="h-4 w-px bg-white/10 mx-0.5" />
-          <button
-            type="button"
-            onClick={onDeleteSelected}
-            className="flex items-center justify-center w-8 h-8 rounded text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition cursor-pointer relative group"
-            title={t("tooltips.delete")}
-            aria-label={t("tools.delete")}
-          >
+          <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
+          <ToolbarButton onClick={onDeleteSelected} danger label={t("tools.delete")} tooltip={t("tooltips.delete")}>
             <Trash2 className="w-4 h-4" />
-            <div className="absolute -top-8 px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl">
-              {t("tooltips.delete")}
-            </div>
-          </button>
+          </ToolbarButton>
         </>
       )}
     </div>

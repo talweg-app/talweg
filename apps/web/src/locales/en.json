@@ -89,7 +89,8 @@
     "microDesc": "Distributed system with live 90° orthogonal edge routing",
     "sprintTitle": "Sprint Planning Mindmap",
     "sprintDesc": "Hierarchical backlog branches with smooth Bezier vectors",
-    "close": "Close Dashboard"
+    "close": "Close Dashboard",
+    "active": "active"
   },
   "contextMenu": {
     "add": "Add",

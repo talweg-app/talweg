@@ -1024,8 +1024,8 @@ export function Canvas({
 
       {/* Floating Status Badge when Connecting Nodes */}
       {connectingSourceId && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 bg-neutral-900/95 border border-white/10 text-neutral-200 px-3 py-1 rounded text-xs font-mono shadow-2xl backdrop-blur-md pointer-events-none flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#16181c] border border-white/[0.08] text-neutral-300 px-2.5 h-7 flex items-center rounded text-[11px] shadow-md pointer-events-none">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400/90 mr-1.5" />
           <span>Click target node to connect</span>
         </div>
       )}

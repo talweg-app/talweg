@@ -25,12 +25,12 @@ export function ZoomControls({
         // canvas pointer capture retargets the click away from the button
         e.stopPropagation();
       }}
-      className="fixed bottom-5 right-5 z-30 flex items-center bg-neutral-900/90 backdrop-blur-md border border-white/10 rounded-lg p-0.5 shadow-2xl select-none"
+      className="absolute bottom-4 right-4 z-30 flex items-center bg-[#131518] border border-white/[0.08] rounded shadow-md select-none"
     >
       <button
         type="button"
         onClick={onZoomOut}
-        className="w-7 h-7 rounded flex items-center justify-center text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80 transition cursor-pointer"
+        className="flex items-center justify-center w-7 h-7 rounded-l text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
         title={t("actions.zoomOut")}
         aria-label={t("actions.zoomOut")}
       >
@@ -40,7 +40,7 @@ export function ZoomControls({
       <button
         type="button"
         onClick={onResetZoom}
-        className="px-1.5 h-7 rounded flex items-center justify-center font-mono text-[11px] text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer min-w-[44px]"
+        className="flex items-center justify-center h-7 min-w-[46px] px-1 font-mono text-[11px] text-neutral-300 hover:text-white hover:bg-white/[0.05] border-x border-white/[0.08] transition cursor-pointer"
         title={t("actions.resetZoom")}
       >
         {percentage}%
@@ -49,23 +49,23 @@ export function ZoomControls({
       <button
         type="button"
         onClick={onZoomIn}
-        className="w-7 h-7 rounded flex items-center justify-center text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80 transition cursor-pointer"
+        className="flex items-center justify-center w-7 h-7 text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
         title={t("actions.zoomIn")}
         aria-label={t("actions.zoomIn")}
       >
         <Plus className="w-3.5 h-3.5" />
       </button>
 
-      <div className="h-3.5 w-px bg-white/10 mx-0.5" />
+      <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
       <button
         type="button"
         onClick={onZoomToFit}
-        className="w-7 h-7 rounded flex items-center justify-center text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80 transition cursor-pointer"
+        className="flex items-center justify-center w-7 h-7 rounded-r text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
         title={t("actions.zoomToFit")}
         aria-label={t("actions.zoomToFit")}
       >
-        <Maximize2 className="w-3 h-3" />
+        <Maximize2 className="w-3.5 h-3.5" />
       </button>
     </div>
   );
