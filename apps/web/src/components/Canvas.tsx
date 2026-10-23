@@ -140,13 +140,12 @@ export function Canvas({
     const container = containerRef.current;
     if (!container) return;
 
-    const zoomAtCursor = (e: WheelEvent, dy: number, minZoom?: number, maxZoom?: number) => {
+    const zoomAtCursor = (e: WheelEvent, zoomFactor: number, minZoom?: number, maxZoom?: number) => {
       const rect = container.getBoundingClientRect();
       const viewportPoint: Point2D = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
       };
-      const zoomFactor = Math.exp(-dy * 0.003);
       onCameraChange((prev) => {
         const safe = sanitizeCamera(prev);
         return zoomAtViewportPoint(safe, viewportPoint, safe.zoom * zoomFactor, minZoom, maxZoom);
@@ -162,7 +161,10 @@ export function Canvas({
 
       if (e.ctrlKey || e.metaKey) {
         // browsers flag trackpad pinch with ctrlKey, so it shares the ctrl+wheel zoom path
-        zoomAtCursor(e, dy, 0.1, 4.0);
+        // linux chromium reports pinch-out with positive deltas, the inverse of a physical
+        // ctrl+wheel tick, so continuous trackpad input flips the sign
+        const isPinchLike = e.deltaMode === 0 && (dy % 1 !== 0 || Math.abs(dy) < 30);
+        zoomAtCursor(e, Math.exp((isPinchLike ? dy : -dy) * 0.003), 0.1, 4.0);
         return;
       }
 
@@ -183,7 +185,7 @@ export function Canvas({
         return;
       }
 
-      zoomAtCursor(e, dy);
+      zoomAtCursor(e, Math.exp(-dy * 0.003));
     };
 
     container.addEventListener("wheel", handleWheel, { passive: false });
