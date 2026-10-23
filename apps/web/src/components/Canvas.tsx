@@ -134,21 +134,24 @@ export function Canvas({
   const [dragOffsets, setDragOffsets] = useState<ReadonlyMap<NodeId, Point2D>>(new Map());
   const [resizeOffsets, setResizeOffsets] = useState<{ id: NodeId; box: TransformBox2D } | null>(null);
 
-  // figma-style wheel routing: pinch/ctrl zooms at the cursor, shift pans sideways,
-  // trackpad 2-finger scroll pans in 2d, discrete wheel ticks zoom
+  // Native trackpad & wheel gesture pipeline:
+  // - Trackpad 2-finger pan (continuous 2D delta)
+  // - Trackpad pinch / Ctrl+wheel (smooth exponential zoom at cursor)
+  // - Discrete mouse wheel (stepped notch zoom at cursor)
+  // - Safari gesture events (hardware-accelerated trackpad pinch)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const zoomAtCursor = (e: WheelEvent, zoomFactor: number, minZoom?: number, maxZoom?: number) => {
+    const zoomAtCursor = (clientX: number, clientY: number, factor: number) => {
       const rect = container.getBoundingClientRect();
       const viewportPoint: Point2D = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: clientX - rect.left,
+        y: clientY - rect.top,
       };
       onCameraChange((prev) => {
         const safe = sanitizeCamera(prev);
-        return zoomAtViewportPoint(safe, viewportPoint, safe.zoom * zoomFactor, minZoom, maxZoom);
+        return zoomAtViewportPoint(safe, viewportPoint, safe.zoom * factor);
       });
     };
 
@@ -159,38 +162,81 @@ export function Canvas({
       const dx = e.deltaX * deltaFactor;
       const dy = e.deltaY * deltaFactor;
 
+      // Trackpad pinch-to-zoom is synthesized by browsers as ctrlKey + wheel
       if (e.ctrlKey || e.metaKey) {
-        // browsers flag trackpad pinch with ctrlKey, so it shares the ctrl+wheel zoom path
-        // linux chromium reports pinch-out with positive deltas, the inverse of a physical
-        // ctrl+wheel tick, so continuous trackpad input flips the sign
-        const isPinchLike = e.deltaMode === 0 && (dy % 1 !== 0 || Math.abs(dy) < 30);
-        zoomAtCursor(e, Math.exp((isPinchLike ? dy : -dy) * 0.003), 0.1, 4.0);
+        const isDiscrete =
+          e.deltaMode !== 0 ||
+          (e.deltaX === 0 && e.deltaY % 1 === 0 && Math.abs(e.deltaY) >= 40);
+        const k = isDiscrete ? 0.0015 : 0.01;
+        zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * k));
         return;
       }
 
       if (e.shiftKey) {
-        // safari keeps shift+wheel delta on deltaY, chromium reports it on deltaX
         const panDx = dx !== 0 ? dx : dy;
         onCameraChange((prev) => panByScreenDelta(sanitizeCamera(prev), { x: -panDx, y: 0 }));
         return;
       }
 
-      // trackpad scroll sends fractional pixel deltas or small steps; wheel ticks are integer and large
-      const isTrackpadScroll =
-        e.deltaX !== 0 ||
-        (e.deltaMode === 0 && (Math.abs(e.deltaY) % 1 !== 0 || Math.abs(e.deltaY) < 30));
+      // physical wheels tick in whole notches: exact ±100/±120 multiples in
+      // pixel mode, or line/page delta modes. trackpad streams vary magnitude
+      // event to event, quantized to plain integers on some x11 drivers, so a
+      // fractionality or size check misroutes them into the zoom branch
+      const isWheelNotch =
+        e.deltaMode !== 0 ||
+        (e.deltaX === 0 &&
+          Number.isInteger(e.deltaY) &&
+          Math.abs(e.deltaY) >= 100 &&
+          (Math.abs(e.deltaY) % 100 === 0 || Math.abs(e.deltaY) % 120 === 0));
 
-      if (isTrackpadScroll) {
+      if (!isWheelNotch) {
         onCameraChange((prev) => panByScreenDelta(sanitizeCamera(prev), { x: -dx, y: -dy }));
         return;
       }
 
-      zoomAtCursor(e, Math.exp(-dy * 0.003));
+      // Discrete physical mouse wheel notch: zoom at cursor (15% step per standard 100px notch)
+      zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * 0.0015));
+    };
+
+    // Safari macOS proprietary trackpad pinch
+    let lastGestureScale = 1;
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+      lastGestureScale = 1;
+    };
+
+    const handleGestureChange = (e: Event) => {
+      e.preventDefault();
+      const ge = e as Event & { clientX: number; clientY: number; scale: number };
+      const factor = ge.scale / lastGestureScale;
+      lastGestureScale = ge.scale;
+      zoomAtCursor(ge.clientX, ge.clientY, factor);
+    };
+
+    const handleGestureEnd = (e: Event) => {
+      e.preventDefault();
+      lastGestureScale = 1;
     };
 
     container.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("gesturestart", handleGestureStart, { passive: false });
+    container.addEventListener("gesturechange", handleGestureChange, { passive: false });
+    container.addEventListener("gestureend", handleGestureEnd, { passive: false });
+
+    // Block browser-level tab zooming when Ctrl+Wheeling near edges
+    const preventWindowZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("wheel", preventWindowZoom, { passive: false });
+
     return () => {
       container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("gesturestart", handleGestureStart);
+      container.removeEventListener("gesturechange", handleGestureChange);
+      container.removeEventListener("gestureend", handleGestureEnd);
+      window.removeEventListener("wheel", preventWindowZoom);
     };
   }, [onCameraChange]);
 
@@ -851,7 +897,7 @@ export function Canvas({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-[calc(100vh-2.5rem)] overflow-hidden bg-[#08090a] select-none touch-none ${cursorClass}`}
+      className={`relative w-full h-[calc(100vh-2.5rem)] overflow-hidden overscroll-none bg-[#08090a] select-none touch-none ${cursorClass}`}
       style={{
         backgroundImage: "radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px)",
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
