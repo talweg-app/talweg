@@ -35,6 +35,7 @@ import { buildPortSlotMap } from "../utils/connectorGeometry.js";
 import { createId } from "../utils/template.js";
 import { ArrowSelectionOverlay } from "./ArrowSelectionOverlay.js";
 import { ConnectorRenderer } from "./ConnectorRenderer.js";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu.js";
 import { NodeRenderer } from "./NodeRenderer.js";
 import { PageTabsBar } from "./PageTabsBar.js";
 import { SelectionBox } from "./SelectionBox.js";
@@ -72,6 +73,9 @@ interface CanvasProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomToFit: () => void;
+  onDeleteSelected?: (() => void) | undefined;
+  onAddMindmapChild?: (() => void) | undefined;
+  onAddMindmapSibling?: (() => void) | undefined;
   adapter?: StorageAdapter | null | undefined;
   boardId?: string | undefined;
   activePageId?: PageId | undefined;
@@ -114,6 +118,9 @@ export function Canvas({
   onZoomIn,
   onZoomOut,
   onZoomToFit,
+  onDeleteSelected,
+  onAddMindmapChild,
+  onAddMindmapSibling,
   adapter,
   boardId,
   activePageId,
@@ -129,6 +136,7 @@ export function Canvas({
   const [connectingSourceId, setConnectingSourceId] = useState<NodeId | null>(null);
   const [connectingSourceAnchor, setConnectingSourceAnchor] = useState<CompassAnchor | null>(null);
   const [hoveredArrowId, setHoveredArrowId] = useState<NodeId | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Local optimistic drag and resize positions for zero-latency 60fps interaction
   const [dragOffsets, setDragOffsets] = useState<ReadonlyMap<NodeId, Point2D>>(new Map());
@@ -168,8 +176,7 @@ export function Canvas({
           e.deltaMode !== 0 ||
           (e.deltaX === 0 && e.deltaY % 1 === 0 && Math.abs(e.deltaY) >= 40);
         const k = isDiscrete ? 0.0015 : 0.01;
-        // x11 natural scroll delivers inverted dy, so zoom scales with +dy here
-        zoomAtCursor(e.clientX, e.clientY, Math.exp(dy * k));
+        zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * k));
         return;
       }
 
@@ -179,12 +186,21 @@ export function Canvas({
         return;
       }
 
-      // plain scroll pans in 2d on every driver: pixel, line or page mode,
-      // fractional or quantized. trackpad streams on some x11 setups are
-      // indistinguishable from wheel notches, so zoom stays on ctrl/pinch only
-      onCameraChange((prev) =>
-        panByScreenDelta(sanitizeCamera(prev), { x: -dx, y: -dy }),
-      );
+      // pixel-mode streams with fractional deltas or any lateral motion are
+      // trackpad scroll; whole single-axis ticks are a physical wheel
+      const isTrackpadScroll =
+        e.deltaX !== 0 ||
+        (e.deltaMode === 0 && (e.deltaY % 1 !== 0 || Math.abs(e.deltaY) < 40));
+
+      if (isTrackpadScroll) {
+        onCameraChange((prev) =>
+          panByScreenDelta(sanitizeCamera(prev), { x: -dx, y: -dy }),
+        );
+        return;
+      }
+
+      // wheel tick: scrolling down zooms out, scrolling up zooms in
+      zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * 0.0015));
     };
 
     // Safari macOS proprietary trackpad pinch
@@ -273,6 +289,208 @@ export function Canvas({
     [camera, getScreenBounds],
   );
 
+  const createNodeAt = useCallback(
+    (tool: ToolType, worldPoint: Point2D): boolean => {
+      const spawnX = mode === "diagrams" ? snap16(worldPoint.x) : Math.round(worldPoint.x);
+      const spawnY = mode === "diagrams" ? snap16(worldPoint.y) : Math.round(worldPoint.y);
+      const timestamp = Date.now();
+
+      if (tool === "rectangle") {
+        const rectId = createId("rect");
+        const node: CanvasNode = {
+          id: rectId,
+          type: "rectangle",
+          x: spawnX - 100,
+          y: spawnY - 40,
+          width: 200,
+          height: 80,
+          rotation: 0,
+          zIndex: 10,
+          opacity: 1,
+          parentId: null,
+          isLocked: false,
+          isVisible: true,
+          style: {
+            fillColor: "#0f141c",
+            strokeColor: "#27272a",
+            strokeWidth: 1,
+            cornerRadius: 6,
+            textColor: "#f4f4f5",
+            fontSize: 13,
+            textAlign: "center",
+            verticalAlign: "middle",
+          },
+          data: { label: "Process" },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        onAddNode(node);
+        return true;
+      }
+
+      if (tool === "diamond") {
+        const diamondId = createId("diamond");
+        const node: DiamondNode = {
+          id: diamondId,
+          type: "diamond",
+          x: spawnX - 70,
+          y: spawnY - 48,
+          width: 140,
+          height: 96,
+          rotation: 0,
+          zIndex: 10,
+          opacity: 1,
+          parentId: null,
+          isLocked: false,
+          isVisible: true,
+          style: {
+            fillColor: "#0f172a",
+            strokeColor: "#38bdf8",
+            strokeWidth: 1.5,
+            textColor: "#f4f4f5",
+            fontSize: 12,
+          },
+          data: { label: "Decision" },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        onAddNode(node);
+        return true;
+      }
+
+      if (tool === "capsule") {
+        const capsuleId = createId("capsule");
+        const node: CapsuleNode = {
+          id: capsuleId,
+          type: "capsule",
+          x: spawnX - 72,
+          y: spawnY - 24,
+          width: 144,
+          height: 48,
+          rotation: 0,
+          zIndex: 10,
+          opacity: 1,
+          parentId: null,
+          isLocked: false,
+          isVisible: true,
+          style: {
+            fillColor: "#062b1e",
+            strokeColor: "#10b981",
+            strokeWidth: 1.5,
+            textColor: "#a7f3d0",
+            fontSize: 12,
+          },
+          data: { label: "Start / End" },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        onAddNode(node);
+        return true;
+      }
+
+      if (tool === "cylinder") {
+        const cylinderId = createId("cylinder");
+        const node: CylinderNode = {
+          id: cylinderId,
+          type: "cylinder",
+          x: spawnX - 72,
+          y: spawnY - 48,
+          width: 144,
+          height: 96,
+          rotation: 0,
+          zIndex: 10,
+          opacity: 1,
+          parentId: null,
+          isLocked: false,
+          isVisible: true,
+          style: {
+            fillColor: "#181126",
+            strokeColor: "#a855f7",
+            strokeWidth: 1.5,
+            textColor: "#e9d5ff",
+            fontSize: 12,
+          },
+          data: { label: "Data Store" },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        onAddNode(node);
+        return true;
+      }
+
+      if (tool === "sticker") {
+        const stickerId = createId("sticker");
+        const node: CanvasNode = {
+          id: stickerId,
+          type: "sticker",
+          x: spawnX - 110,
+          y: spawnY - 100,
+          width: 220,
+          height: 200,
+          rotation: 0,
+          zIndex: 10,
+          opacity: 1,
+          parentId: null,
+          isLocked: false,
+          isVisible: true,
+          style: {
+            fillColor: "#fef9c3",
+            textColor: "#422006",
+            fontSize: 14,
+            fontFamily: "sans-serif",
+            cornerRadius: 4,
+          },
+          data: {
+            content: "New note...",
+            stickerShape: "square",
+          },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        onAddNode(node);
+        return true;
+      }
+
+      if (tool === "card") {
+        const cardId = createId("card");
+        const node: CanvasNode = {
+          id: cardId,
+          type: "card",
+          x: spawnX - 170,
+          y: spawnY - 90,
+          width: 340,
+          height: 180,
+          rotation: 0,
+          zIndex: 10,
+          opacity: 1,
+          parentId: null,
+          isLocked: false,
+          isVisible: true,
+          style: {
+            fillColor: "#171717",
+            strokeColor: "#262626",
+            strokeWidth: 1,
+            cornerRadius: 8,
+            textColor: "#f5f5f5",
+            fontSize: 13,
+          },
+          data: {
+            title: "New Card",
+            status: "todo",
+            tags: [],
+          },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        onAddNode(node);
+        return true;
+      }
+
+      return false;
+    },
+    [mode, onAddNode],
+  );
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
     try {
@@ -305,204 +523,8 @@ export function Canvas({
 
     if (e.button !== 0) return;
 
-    const spawnX = mode === "diagrams" ? snap16(worldPoint.x) : Math.round(worldPoint.x);
-    const spawnY = mode === "diagrams" ? snap16(worldPoint.y) : Math.round(worldPoint.y);
-    const timestamp = Date.now();
-
     // Creation tools on background click
-    if (activeTool === "rectangle") {
-      const rectId = createId("rect");
-      const node: CanvasNode = {
-        id: rectId,
-        type: "rectangle",
-        x: spawnX - 100,
-        y: spawnY - 40,
-        width: 200,
-        height: 80,
-        rotation: 0,
-        zIndex: 10,
-        opacity: 1,
-        parentId: null,
-        isLocked: false,
-        isVisible: true,
-        style: {
-          fillColor: "#0f141c",
-          strokeColor: "#27272a",
-          strokeWidth: 1,
-          cornerRadius: 6,
-          textColor: "#f4f4f5",
-          fontSize: 13,
-          textAlign: "center",
-          verticalAlign: "middle",
-        },
-        data: { label: "Process" },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      onAddNode(node);
-      onSelectTool("select");
-      return;
-    }
-
-    if (activeTool === "diamond") {
-      const diamondId = createId("diamond");
-      const node: DiamondNode = {
-        id: diamondId,
-        type: "diamond",
-        x: spawnX - 70,
-        y: spawnY - 48,
-        width: 140,
-        height: 96,
-        rotation: 0,
-        zIndex: 10,
-        opacity: 1,
-        parentId: null,
-        isLocked: false,
-        isVisible: true,
-        style: {
-          fillColor: "#0f172a",
-          strokeColor: "#38bdf8",
-          strokeWidth: 1.5,
-          textColor: "#f4f4f5",
-          fontSize: 12,
-        },
-        data: { label: "Decision" },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      onAddNode(node);
-      onSelectTool("select");
-      return;
-    }
-
-    if (activeTool === "capsule") {
-      const capsuleId = createId("capsule");
-      const node: CapsuleNode = {
-        id: capsuleId,
-        type: "capsule",
-        x: spawnX - 72,
-        y: spawnY - 24,
-        width: 144,
-        height: 48,
-        rotation: 0,
-        zIndex: 10,
-        opacity: 1,
-        parentId: null,
-        isLocked: false,
-        isVisible: true,
-        style: {
-          fillColor: "#062b1e",
-          strokeColor: "#10b981",
-          strokeWidth: 1.5,
-          textColor: "#a7f3d0",
-          fontSize: 12,
-        },
-        data: { label: "Start / End" },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      onAddNode(node);
-      onSelectTool("select");
-      return;
-    }
-
-    if (activeTool === "cylinder") {
-      const cylinderId = createId("cylinder");
-      const node: CylinderNode = {
-        id: cylinderId,
-        type: "cylinder",
-        x: spawnX - 72,
-        y: spawnY - 48,
-        width: 144,
-        height: 96,
-        rotation: 0,
-        zIndex: 10,
-        opacity: 1,
-        parentId: null,
-        isLocked: false,
-        isVisible: true,
-        style: {
-          fillColor: "#181126",
-          strokeColor: "#a855f7",
-          strokeWidth: 1.5,
-          textColor: "#e9d5ff",
-          fontSize: 12,
-        },
-        data: { label: "Data Store" },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      onAddNode(node);
-      onSelectTool("select");
-      return;
-    }
-
-    if (activeTool === "sticker") {
-      const stickerId = createId("sticker");
-      const node: CanvasNode = {
-        id: stickerId,
-        type: "sticker",
-        x: spawnX - 110,
-        y: spawnY - 100,
-        width: 220,
-        height: 200,
-        rotation: 0,
-        zIndex: 10,
-        opacity: 1,
-        parentId: null,
-        isLocked: false,
-        isVisible: true,
-        style: {
-          fillColor: "#fef9c3",
-          textColor: "#422006",
-          fontSize: 14,
-          fontFamily: "sans-serif",
-          cornerRadius: 4,
-        },
-        data: {
-          content: "New note...",
-          stickerShape: "square",
-        },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      onAddNode(node);
-      onSelectTool("select");
-      return;
-    }
-
-    if (activeTool === "card") {
-      const cardId = createId("card");
-      const node: CanvasNode = {
-        id: cardId,
-        type: "card",
-        x: spawnX - 170,
-        y: spawnY - 90,
-        width: 340,
-        height: 180,
-        rotation: 0,
-        zIndex: 10,
-        opacity: 1,
-        parentId: null,
-        isLocked: false,
-        isVisible: true,
-        style: {
-          fillColor: "#171717",
-          strokeColor: "#262626",
-          strokeWidth: 1,
-          cornerRadius: 8,
-          textColor: "#f5f5f5",
-          fontSize: 13,
-        },
-        data: {
-          title: "New Card",
-          status: "todo",
-          tags: [],
-        },
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      onAddNode(node);
+    if (createNodeAt(activeTool, worldPoint)) {
       onSelectTool("select");
       return;
     }
@@ -897,6 +919,10 @@ export function Canvas({
       onPointerUp={handlePointerUp}
       onContextMenu={(e) => {
         e.preventDefault();
+        setContextMenu({
+          clientPoint: { x: e.clientX, y: e.clientY },
+          worldPoint: toWorld(e.clientX, e.clientY),
+        });
       }}
       onAuxClick={(e) => {
         if (e.button === 1) {
@@ -998,10 +1024,31 @@ export function Canvas({
 
       {/* Floating Status Badge when Connecting Nodes */}
       {connectingSourceId && (
-        <div className="fixed top-12 left-1/2 -translate-x-1/2 bg-neutral-900/95 border border-white/10 text-neutral-200 px-3 py-1 rounded text-xs font-mono shadow-2xl backdrop-blur-md pointer-events-none flex items-center gap-2">
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 bg-neutral-900/95 border border-white/10 text-neutral-200 px-3 py-1 rounded text-xs font-mono shadow-2xl backdrop-blur-md pointer-events-none flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
           <span>Click target node to connect</span>
         </div>
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          state={contextMenu}
+          mode={mode}
+          hasSelection={selectedNodeIds.size > 0}
+          onClose={() => {
+            setContextMenu(null);
+          }}
+          onCreateNode={(tool) => {
+            createNodeAt(tool, contextMenu.worldPoint);
+          }}
+          onDeleteSelected={onDeleteSelected}
+          onAddMindmapChild={onAddMindmapChild}
+          onAddMindmapSibling={onAddMindmapSibling}
+          onZoomIn={onZoomIn}
+          onZoomOut={onZoomOut}
+          onZoomToFit={onZoomToFit}
+          onResetZoom={onResetZoom}
+        />
       )}
 
       {/* Floating Zoom Controls (bottom-right) */}

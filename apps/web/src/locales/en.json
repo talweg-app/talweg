@@ -90,5 +90,11 @@
     "sprintTitle": "Sprint Planning Mindmap",
     "sprintDesc": "Hierarchical backlog branches with smooth Bezier vectors",
     "close": "Close Dashboard"
+  },
+  "contextMenu": {
+    "add": "Add",
+    "selection": "Selection",
+    "view": "View",
+    "topic": "Topic"
   }
 }

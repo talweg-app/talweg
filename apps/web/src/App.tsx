@@ -118,6 +118,13 @@ function CanvasView({ documentId, pageId, onOpenDashboard }: CanvasViewProps) {
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
           onZoomToFit={zoomToFit}
+          onDeleteSelected={deleteSelectedNodes}
+          onAddMindmapChild={() => {
+            if (selectedFirstId) createMindmapChild(selectedFirstId);
+          }}
+          onAddMindmapSibling={() => {
+            if (selectedFirstId) createMindmapSibling(selectedFirstId);
+          }}
           adapter={adapter}
           boardId={documentId}
           activePageId={activePageId}

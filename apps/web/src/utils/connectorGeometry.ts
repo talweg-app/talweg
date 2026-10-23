@@ -163,6 +163,10 @@ function bezierPath(
   ].join(" ");
 }
 
+function boxesIntersect(a: BoundingBox, b: BoundingBox): boolean {
+  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+
 export function computeConnectorGeometry(
   arrow: ArrowNode,
   document: CanvasDocument,
@@ -182,7 +186,16 @@ export function computeConnectorGeometry(
     y: (sourcePoint.y + targetPoint.y) / 2,
   };
 
-  if (arrow.data.curveStyle === "bezier") {
+  // stacked or overlapping endpoints push the obstacle router into degenerate
+  // zigzags, so those pairs fall back to the smooth curve
+  const hasDegenerateRoute =
+    boxesIntersect(resolved.sourceBox, resolved.targetBox) ||
+    resolved.sourceBox.width === 0 ||
+    resolved.sourceBox.height === 0 ||
+    resolved.targetBox.width === 0 ||
+    resolved.targetBox.height === 0;
+
+  if (arrow.data.curveStyle === "bezier" || hasDegenerateRoute) {
     return {
       isBezier: true,
       lineSvgPath: bezierPath(sourcePoint, targetPoint, sourceAnchor, targetAnchor),

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
   Download,
   Languages,
   Network,
@@ -36,7 +37,27 @@ export function Header({
 }: HeaderProps) {
   const { t, language, toggleLanguage } = useTranslation();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const modeMenuRef = useRef<HTMLDivElement>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!modeMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!(e.target instanceof Node) || !modeMenuRef.current?.contains(e.target)) {
+        setModeMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModeMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [modeMenuOpen]);
 
   useEffect(() => {
     return () => {
@@ -122,73 +143,66 @@ export function Header({
         </div>
       </div>
 
-      {/* Center: Mode Switcher (Linear segmented dock with active indicator line and tooltips) */}
-      <div className="flex items-center bg-neutral-900/90 p-0.5 rounded-md border border-white/10 shadow-sm">
+      {/* Center: Mode Picker (single dropdown instead of a segmented row) */}
+      <div ref={modeMenuRef} className="relative">
         <button
           type="button"
           onClick={() => {
-            onModeChange("whiteboard");
+            setModeMenuOpen((open) => !open);
           }}
-          className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer group ${
-            mode === "whiteboard"
-              ? "bg-neutral-800 text-neutral-100 shadow-sm"
-              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
-          }`}
-          title={t("tooltips.modeWhiteboard")}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-900/90 border border-white/10 shadow-sm text-[11px] font-medium text-neutral-200 hover:bg-neutral-800 transition cursor-pointer"
+          title={t(`tooltips.mode${mode.charAt(0).toUpperCase()}${mode.slice(1)}`)}
+          aria-haspopup="menu"
+          aria-expanded={modeMenuOpen}
         >
-          <StickyNote className="w-3 h-3" />
-          <span>{t("modes.whiteboard")}</span>
-          {mode === "whiteboard" && (
-            <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-amber-400 rounded-full" />
-          )}
-          <div className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl z-50">
-            {t("tooltips.modeWhiteboard")}
-          </div>
+          {mode === "whiteboard" && <StickyNote className="w-3 h-3" />}
+          {mode === "diagrams" && <Network className="w-3 h-3" />}
+          {mode === "mindmap" && <Share2 className="w-3 h-3" />}
+          <span>{t(`modes.${mode}`)}</span>
+          <ChevronDown className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`} />
         </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            onModeChange("diagrams");
-          }}
-          className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer group ${
-            mode === "diagrams"
-              ? "bg-neutral-800 text-neutral-100 shadow-sm"
-              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
-          }`}
-          title={t("tooltips.modeDiagrams")}
-        >
-          <Network className="w-3 h-3" />
-          <span>{t("modes.diagrams")}</span>
-          {mode === "diagrams" && (
-            <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-amber-400 rounded-full" />
-          )}
-          <div className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl z-50">
-            {t("tooltips.modeDiagrams")}
+        {modeMenuOpen && (
+          <div
+            role="menu"
+            data-testid="mode-picker-menu"
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 min-w-[260px] bg-neutral-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-2xl select-none z-50 overflow-hidden"
+          >
+            {(["whiteboard", "diagrams", "mindmap"] as const).map((candidate) => {
+              const tooltipKey = `tooltips.mode${candidate.charAt(0).toUpperCase()}${candidate.slice(1)}`;
+              return (
+                <button
+                  key={candidate}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={mode === candidate}
+                  onClick={() => {
+                    onModeChange(candidate);
+                    setModeMenuOpen(false);
+                  }}
+                  className={`w-full flex items-start gap-2.5 px-3 py-2 text-left transition cursor-pointer ${
+                    mode === candidate
+                      ? "bg-neutral-800/80 text-neutral-100"
+                      : "text-neutral-300 hover:bg-neutral-800/50 hover:text-white"
+                  }`}
+                >
+                  <span className="mt-0.5">
+                    {candidate === "whiteboard" && <StickyNote className="w-3.5 h-3.5 text-amber-400/80" />}
+                    {candidate === "diagrams" && <Network className="w-3.5 h-3.5 text-sky-400/80" />}
+                    {candidate === "mindmap" && <Share2 className="w-3.5 h-3.5 text-indigo-400/80" />}
+                  </span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium">{t(`modes.${candidate}`)}</span>
+                    <span className="text-[10px] text-neutral-500 font-mono leading-snug">
+                      {t(tooltipKey)}
+                    </span>
+                  </span>
+                  {mode === candidate && <Check className="w-3.5 h-3.5 text-emerald-400 ml-auto mt-0.5" />}
+                </button>
+              );
+            })}
           </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            onModeChange("mindmap");
-          }}
-          className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer group ${
-            mode === "mindmap"
-              ? "bg-neutral-800 text-neutral-100 shadow-sm"
-              : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40"
-          }`}
-          title={t("tooltips.modeMindmap")}
-        >
-          <Share2 className="w-3 h-3" />
-          <span>{t("modes.mindmap")}</span>
-          {mode === "mindmap" && (
-            <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-amber-400 rounded-full" />
-          )}
-          <div className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-neutral-950 text-neutral-300 text-[10px] font-mono border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap shadow-xl z-50">
-            {t("tooltips.modeMindmap")}
-          </div>
-        </button>
+        )}
       </div>
 
       {/* Right: Technical Badges, Zoom Monospace & Actions */}

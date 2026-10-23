@@ -64,6 +64,7 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
     (node): node is ArrowNode => node.type === "arrow",
   );
   const obstacles = nodes.map(nodeToBoundingBox);
+  const edgeLabels: { text: string; x: number; y: number }[] = [];
 
   for (const arrow of arrowNodes) {
     const sourceNode = document.nodes[arrow.data.sourceId];
@@ -106,8 +107,42 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
       ctx.fill(markerPath);
     }
 
+    // labels are collected and drawn after nodes, otherwise node boxes cover them
+    if (arrow.data.label) {
+      const mid =
+        rendered.waypoints[Math.floor(rendered.waypoints.length / 2)] ??
+        { x: (sourceBox.minX + targetBox.maxX) / 2, y: (sourceBox.minY + targetBox.maxY) / 2 };
+      edgeLabels.push({ text: arrow.data.label, x: mid.x, y: mid.y });
+    }
+
     ctx.restore();
   }
+
+  const g = ctx;
+  const drawCenteredLabel = (
+    text: string,
+    x: number,
+    y: number,
+    fontSize: number,
+    color: string,
+    maxWidth: number,
+  ): void => {
+    g.fillStyle = color;
+    g.font = `500 ${String(fontSize)}px system-ui, sans-serif`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+
+    const lines = text.split("\n");
+    const lineHeight = fontSize * 1.3;
+    const totalHeight = lines.length * lineHeight;
+    const startY = y - totalHeight / 2 + lineHeight / 2;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line !== undefined) {
+        g.fillText(line, x, startY + i * lineHeight, maxWidth);
+      }
+    }
+  };
 
   // Draw nodes
   for (const node of nodes) {
@@ -123,34 +158,60 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
       ctx.translate(-(rx + rw / 2), -(ry + rh / 2));
     }
 
-    if (node.type === "rectangle") {
+    if (node.type === "rectangle" || node.type === "diamond" || node.type === "capsule" || node.type === "cylinder") {
       ctx.fillStyle = node.style.fillColor ?? "#1e293b";
       ctx.strokeStyle = node.style.strokeColor ?? "#38bdf8";
       ctx.lineWidth = node.style.strokeWidth ?? 1.5;
       const radius = typeof node.style.cornerRadius === "number" ? node.style.cornerRadius : 8;
+      const label = typeof node.data?.label === "string" ? node.data.label : "";
+      const fontSize = node.style.fontSize ?? 13;
 
-      ctx.beginPath();
-      ctx.roundRect(rx, ry, rw, rh, radius);
-      ctx.fill();
-      ctx.stroke();
+      if (node.type === "rectangle") {
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, rw, rh, radius);
+        ctx.fill();
+        ctx.stroke();
+        if (label) drawCenteredLabel(label, rx + rw / 2, ry + rh / 2, fontSize, node.style.textColor ?? "#f8fafc", rw - 12);
+      } else if (node.type === "diamond") {
+        const cx = rx + rw / 2;
+        const cy = ry + rh / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, ry);
+        ctx.lineTo(rx + rw, cy);
+        ctx.lineTo(cx, ry + rh);
+        ctx.lineTo(rx, cy);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // the rhombus narrows towards the corners, keep text inside its middle band
+        if (label) drawCenteredLabel(label, cx, cy, Math.min(fontSize, 12), node.style.textColor ?? "#f8fafc", rw * 0.6);
+      } else if (node.type === "capsule") {
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, rw, rh, Math.min(rw, rh) / 2);
+        ctx.fill();
+        ctx.stroke();
+        if (label) drawCenteredLabel(label, rx + rw / 2, ry + rh / 2, fontSize, node.style.textColor ?? "#f8fafc", rw - 12);
+      } else {
+        // cylinder: top ellipse, side walls and a bulging bottom
+        const capH = Math.min(rh * 0.22, 16);
+        const cx = rx + rw / 2;
+        const halfW = rw / 2;
 
-      if (node.data?.label) {
-        ctx.fillStyle = node.style.textColor ?? "#f8fafc";
-        ctx.font = `${String(node.style.fontWeight ?? 500)} ${String(node.style.fontSize ?? 14)}px system-ui, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+        ctx.beginPath();
+        ctx.moveTo(rx, ry + capH);
+        ctx.lineTo(rx, ry + rh - capH);
+        ctx.ellipse(cx, ry + rh - capH, halfW, capH, 0, Math.PI, 0, true);
+        ctx.lineTo(rx + rw, ry + capH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
 
-        const lines = node.data.label.split("\n");
-        const lineHeight = (node.style.fontSize ?? 14) * 1.3;
-        const totalHeight = lines.length * lineHeight;
-        const startTextY = ry + rh / 2 - totalHeight / 2 + lineHeight / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, ry + capH, halfW, capH, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (line !== undefined) {
-            ctx.fillText(line, rx + rw / 2, startTextY + i * lineHeight);
-          }
-        }
+        if (label) drawCenteredLabel(label, cx, ry + rh / 2 + capH / 2, fontSize, node.style.textColor ?? "#f8fafc", rw - 12);
       }
     } else if (node.type === "sticker") {
       ctx.fillStyle = node.style.fillColor ?? "#fef08a";
@@ -219,6 +280,26 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
 
     ctx.restore();
   }
+
+  // edge labels on top of nodes, mirroring the on-screen overlay ordering
+  ctx.save();
+  ctx.translate(-originX, -originY);
+  ctx.font = "500 10px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const item of edgeLabels) {
+    const textWidth = ctx.measureText(item.text).width;
+    ctx.fillStyle = "#090a0f";
+    ctx.strokeStyle = "#27272a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(item.x - textWidth / 2 - 6, item.y - 9, textWidth + 12, 18, 3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#a1a1aa";
+    ctx.fillText(item.text, item.x, item.y);
+  }
+  ctx.restore();
 
   canvas.toBlob((blob) => {
     if (!blob) return;
