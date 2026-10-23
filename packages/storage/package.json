@@ -1,0 +1,33 @@
+{
+  "name": "@talweg/storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@talweg/core": "workspace:*",
+    "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "5.0.5",
+    "fake-indexeddb": "^6.2.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

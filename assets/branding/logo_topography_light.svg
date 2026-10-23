@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <linearGradient id="streamGradL" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0D9488" stop-opacity="0.5" />
+      <stop offset="50%" stop-color="#0F766E" stop-opacity="1" />
+      <stop offset="100%" stop-color="#0369A1" stop-opacity="1" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="#F4F0E8" />
+  <circle cx="512" cy="512" r="480" stroke="#E2DAC9" stroke-width="2" stroke-dasharray="8 12" />
+
+  <path d="M 220 290 Q 512 410 804 290" stroke="#D1C7B2" stroke-width="6" stroke-linecap="round" fill="none" />
+  <path d="M 190 410 Q 360 480 470 510 L 512 525 L 554 510 Q 664 480 834 410" stroke="#C0B49B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M 170 550 Q 340 630 460 670 L 512 690 L 564 670 Q 684 630 854 550" stroke="#AFA083" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M 160 700 Q 330 790 450 835 L 512 860 L 574 835 Q 694 790 864 700" stroke="#9A8968" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <path d="M 512 180 L 512 860" stroke="#0F766E" stroke-width="20" opacity="0.12" />
+  <path d="M 512 180 L 512 860" stroke="url(#streamGradL)" stroke-width="10" stroke-linecap="round" />
+
+  <circle cx="512" cy="350" r="8" fill="#F4F0E8" stroke="#0F766E" stroke-width="4" />
+  <circle cx="512" cy="525" r="10" fill="#F4F0E8" stroke="#0F766E" stroke-width="5" />
+  <circle cx="512" cy="690" r="12" fill="#F4F0E8" stroke="#0D9488" stroke-width="6" />
+  
+  <circle cx="512" cy="860" r="22" fill="#0F766E" />
+  <circle cx="512" cy="860" r="12" fill="#F4F0E8" stroke="#0F766E" stroke-width="4" />
+</svg>

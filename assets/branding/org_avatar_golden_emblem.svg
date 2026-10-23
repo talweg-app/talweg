@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <radialGradient id="emblemBg" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#121216" />
+      <stop offset="100%" stop-color="#040405" />
+    </radialGradient>
+    <linearGradient id="ringGold" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFD000" />
+      <stop offset="100%" stop-color="#FFB300" />
+    </linearGradient>
+    <filter id="emblemGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#emblemBg)" />
+
+  <!-- Circular Outer Frame with Tech Tick Marks -->
+  <circle cx="512" cy="512" r="380" stroke="#22222B" stroke-width="4" stroke-dasharray="12 18" />
+  <circle cx="512" cy="512" r="420" stroke="#16161D" stroke-width="2" />
+
+  <!-- Flowing Topographic Contour Arcs -->
+  <path d="M 280 340 C 390 440, 470 460, 512 460 C 554 460, 634 440, 744 340" stroke="#33333F" stroke-width="8" stroke-linecap="round" fill="none" />
+  <path d="M 240 460 C 370 570, 460 590, 512 590 C 564 590, 654 570, 784 460" stroke="#444454" stroke-width="10" stroke-linecap="round" fill="none" />
+  <path d="M 220 590 C 350 710, 450 730, 512 730 C 574 730, 674 710, 804 590" stroke="#555568" stroke-width="10" stroke-linecap="round" fill="none" />
+
+  <!-- The Golden Fissure (Talweg Stream crossing the arcs) -->
+  <path d="M 512 240 L 512 800" stroke="#FFD000" stroke-width="28" opacity="0.15" filter="url(#emblemGlow)" />
+  <path d="M 512 240 L 512 800" stroke="url(#ringGold)" stroke-width="10" stroke-linecap="round" />
+
+  <!-- Precision Crosshair Markers -->
+  <circle cx="512" cy="310" r="6" fill="#FFD000" />
+  <circle cx="512" cy="460" r="9" fill="#0A0A0D" stroke="#FFD000" stroke-width="4" />
+  <circle cx="512" cy="590" r="11" fill="#0A0A0D" stroke="#FFD000" stroke-width="5" />
+  <circle cx="512" cy="730" r="13" fill="#0A0A0D" stroke="#FFD000" stroke-width="6" />
+
+  <!-- Final Golden Core Beacon -->
+  <circle cx="512" cy="800" r="26" fill="#FFD000" filter="url(#emblemGlow)" />
+  <circle cx="512" cy="800" r="14" fill="#060608" stroke="#FFE500" stroke-width="5" />
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <linearGradient id="tBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F171A" />
+      <stop offset="100%" stop-color="#080D0F" />
+    </linearGradient>
+    <linearGradient id="tStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5EEAD4" />
+      <stop offset="100%" stop-color="#0EA5E9" />
+    </linearGradient>
+    <filter id="tGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#tBg)" />
+  <path d="M 240 320 Q 512 440 784 320" stroke="#18252C" stroke-width="12" stroke-linecap="round" fill="none" />
+  <path d="M 280 440 Q 512 550 744 440" stroke="#1E2F38" stroke-width="12" stroke-linecap="round" fill="none" />
+
+  <path d="M 240 360 C 400 480, 470 500, 512 500 C 554 500, 624 480, 784 360" 
+        stroke="url(#tStroke)" stroke-width="36" stroke-linecap="round" fill="none" />
+
+  <path d="M 512 500 L 512 780" stroke="#15242C" stroke-width="48" stroke-linecap="round" />
+  <path d="M 512 500 L 512 780" stroke="url(#tStroke)" stroke-width="36" stroke-linecap="round" />
+
+  <circle cx="512" cy="780" r="28" fill="#5EEAD4" filter="url(#tGlow)" />
+  <circle cx="512" cy="780" r="16" fill="#080D0F" stroke="#5EEAD4" stroke-width="6" />
+</svg>
