@@ -168,7 +168,8 @@ export function Canvas({
           e.deltaMode !== 0 ||
           (e.deltaX === 0 && e.deltaY % 1 === 0 && Math.abs(e.deltaY) >= 40);
         const k = isDiscrete ? 0.0015 : 0.01;
-        zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * k));
+        // x11 natural scroll delivers inverted dy, so zoom scales with +dy here
+        zoomAtCursor(e.clientX, e.clientY, Math.exp(dy * k));
         return;
       }
 
@@ -178,24 +179,12 @@ export function Canvas({
         return;
       }
 
-      // physical wheels tick in whole notches: exact ±100/±120 multiples in
-      // pixel mode, or line/page delta modes. trackpad streams vary magnitude
-      // event to event, quantized to plain integers on some x11 drivers, so a
-      // fractionality or size check misroutes them into the zoom branch
-      const isWheelNotch =
-        e.deltaMode !== 0 ||
-        (e.deltaX === 0 &&
-          Number.isInteger(e.deltaY) &&
-          Math.abs(e.deltaY) >= 100 &&
-          (Math.abs(e.deltaY) % 100 === 0 || Math.abs(e.deltaY) % 120 === 0));
-
-      if (!isWheelNotch) {
-        onCameraChange((prev) => panByScreenDelta(sanitizeCamera(prev), { x: -dx, y: -dy }));
-        return;
-      }
-
-      // Discrete physical mouse wheel notch: zoom at cursor (15% step per standard 100px notch)
-      zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * 0.0015));
+      // plain scroll pans in 2d on every driver: pixel, line or page mode,
+      // fractional or quantized. trackpad streams on some x11 setups are
+      // indistinguishable from wheel notches, so zoom stays on ctrl/pinch only
+      onCameraChange((prev) =>
+        panByScreenDelta(sanitizeCamera(prev), { x: -dx, y: -dy }),
+      );
     };
 
     // Safari macOS proprietary trackpad pinch
