@@ -1,29 +1,44 @@
 import {
   type ArrowNode,
-  type BoundingBox,
   type CanvasDocument,
-  type CanvasNode,
   computeGroupBounds,
 } from "@talweg/core";
-import { renderOrthogonalEdge } from "@talweg/router";
+import type { StorageAdapter } from "@talweg/storage";
+import { resolveAssetUrl } from "./assets.js";
+import {
+  buildPortSlotMap,
+  computeConnectorGeometry,
+} from "./connectorGeometry.js";
 import { drawNode } from "./drawNode.js";
 
-function nodeToBoundingBox(node: CanvasNode): BoundingBox {
-  return {
-    minX: node.x,
-    minY: node.y,
-    maxX: node.x + node.width,
-    maxY: node.y + node.height,
-    width: node.width,
-    height: node.height,
-  };
-}
-
-export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.png"): void {
-  const visibleNodes = Object.values(document.nodes).filter((node) => node.isVisible && (!document.activePageId || !node.pageId || node.pageId === document.activePageId));
+export async function exportToPng(
+  document: CanvasDocument,
+  filename = "talweg-canvas.png",
+  adapter?: StorageAdapter | null,
+): Promise<void> {
+  const visibleNodes = Object.values(document.nodes).filter(
+    (node) =>
+      node.isVisible &&
+      (!document.activePageId ||
+        !node.pageId ||
+        node.pageId === document.activePageId),
+  );
   const nodes = visibleNodes.filter((node) => node.type !== "arrow");
   if (nodes.length === 0) return;
 
+  const images = new Map<string, HTMLImageElement>();
+  await Promise.all(
+    nodes
+      .filter((node) => node.type === "image")
+      .map(async (node) => {
+        const url = await resolveAssetUrl(node.data.assetId, adapter);
+        if (!url) throw new Error(`Missing image asset: ${node.data.assetId}`);
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        images.set(node.id, image);
+      }),
+  );
   const bounds = computeGroupBounds(nodes);
   const padding = 60;
   const canvasWidth = bounds.width + padding * 2;
@@ -65,35 +80,16 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
   const arrowNodes = visibleNodes.filter(
     (node): node is ArrowNode => node.type === "arrow",
   );
-  const obstacles = nodes.map(nodeToBoundingBox);
+  const scene = {
+    ...document,
+    nodes: Object.fromEntries(visibleNodes.map((node) => [node.id, node])),
+  };
+  const portSlots = buildPortSlotMap(scene);
   const edgeLabels: { text: string; x: number; y: number }[] = [];
 
   for (const arrow of arrowNodes) {
-    const sourceNode = document.nodes[arrow.data.sourceId];
-    const targetNode = document.nodes[arrow.data.targetId];
-    if (!sourceNode || !targetNode) continue;
-
-    const sourceBox = nodeToBoundingBox(sourceNode);
-    const targetBox = nodeToBoundingBox(targetNode);
-
-    const edgeObstacles = obstacles.filter(
-      (b) =>
-        !(b.minX === sourceBox.minX && b.minY === sourceBox.minY) &&
-        !(b.minX === targetBox.minX && b.minY === targetBox.minY),
-    );
-
-    const rendered = renderOrthogonalEdge(
-      sourceBox,
-      targetBox,
-      undefined,
-      undefined,
-      edgeObstacles,
-      {
-        cornerRadius: 8,
-        endArrow: arrow.data.endArrow ?? "arrow",
-        strokeWidth: arrow.style.strokeWidth ?? 1.5,
-      },
-    );
+    const rendered = computeConnectorGeometry(arrow, scene, portSlots);
+    if (!rendered) continue;
 
     ctx.save();
     ctx.translate(-originX, -originY);
@@ -101,10 +97,21 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
     const path = new Path2D(rendered.lineSvgPath);
     ctx.strokeStyle = arrow.style.strokeColor ?? "#38bdf8";
     ctx.lineWidth = arrow.style.strokeWidth ?? 1.5;
-    ctx.setLineDash(arrow.style.strokeDash === "dashed" ? [8, 5] : arrow.style.strokeDash === "dotted" ? [2, 4] : []);
-    if (arrow.style.strokeWidth !== 0 && arrow.style.strokeDash !== "none") ctx.stroke(path);
+    ctx.setLineDash(
+      arrow.style.strokeDash === "dashed"
+        ? [8, 5]
+        : arrow.style.strokeDash === "dotted"
+          ? [2, 4]
+          : [],
+    );
+    if (arrow.style.strokeWidth !== 0 && arrow.style.strokeDash !== "none")
+      ctx.stroke(path);
 
-    if (rendered.endMarkerSvg && arrow.style.strokeWidth !== 0 && arrow.style.strokeDash !== "none") {
+    if (
+      rendered.endMarkerSvg &&
+      arrow.style.strokeWidth !== 0 &&
+      arrow.style.strokeDash !== "none"
+    ) {
       const markerPath = new Path2D(rendered.endMarkerSvg);
       ctx.fillStyle = arrow.style.strokeColor ?? "#38bdf8";
       ctx.fill(markerPath);
@@ -112,9 +119,7 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
 
     // labels are collected and drawn after nodes, otherwise node boxes cover them
     if (arrow.data.label) {
-      const mid =
-        rendered.waypoints[Math.floor(rendered.waypoints.length / 2)] ??
-        { x: (sourceBox.minX + targetBox.maxX) / 2, y: (sourceBox.minY + targetBox.maxY) / 2 };
+      const mid = rendered.midpoint;
       edgeLabels.push({ text: arrow.data.label, x: mid.x, y: mid.y });
     }
 
@@ -123,10 +128,13 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
 
   for (const node of [...nodes].sort((a, b) => a.zIndex - b.zIndex)) {
     ctx.save();
-    ctx.translate(node.x - originX + node.width / 2, node.y - originY + node.height / 2);
-    ctx.rotate(node.rotation * Math.PI / 180);
+    ctx.translate(
+      node.x - originX + node.width / 2,
+      node.y - originY + node.height / 2,
+    );
+    ctx.rotate((node.rotation * Math.PI) / 180);
     ctx.translate(-node.width / 2, -node.height / 2);
-    drawNode(ctx, node);
+    drawNode(ctx, node, images.get(node.id));
     ctx.restore();
   }
 
@@ -142,7 +150,13 @@ export function exportToPng(document: CanvasDocument, filename = "talweg-canvas.
     ctx.strokeStyle = "#27272a";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(item.x - textWidth / 2 - 6, item.y - 9, textWidth + 12, 18, 3);
+    ctx.roundRect(
+      item.x - textWidth / 2 - 6,
+      item.y - 9,
+      textWidth + 12,
+      18,
+      3,
+    );
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#a1a1aa";

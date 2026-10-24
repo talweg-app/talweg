@@ -11,8 +11,7 @@ import {
   type PageId,
   type Point2D,
   computeGroupBounds,
-  getNextZoomIn,
-  getNextZoomOut,
+  zoomAtViewportPoint,
   sanitizeCamera,
   screenToWorld,
   zoomToBounds,
@@ -39,9 +38,11 @@ import type {
   ToolType,
 } from "../types.js";
 import { getImageDimensions, setCachedAssetUrl } from "../utils/assets.js";
-import { saveDocumentToFileSystem } from "../utils/fileSystem.js";
+import { getLinkedFileHandle, type FileSaveState, type NativeFileSystemFileHandle, saveDocumentToFileSystem } from "../utils/fileSystem.js";
 import { layoutMindmapTree } from "../utils/mindmap.js";
 import { createId, createInitialScene } from "../utils/template.js";
+
+import { promoteTemplateDraft } from "../utils/boardLibrary.js";
 
 const DEFAULT_DOC_ID = "default-doc" as DocumentId;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
@@ -49,6 +50,7 @@ const MAX_RECONNECT_DELAY_MS = 10000;
 const BACKOFF_FACTOR = 1.5;
 
 export interface UseCanvasReturn {
+  viewportRef: React.RefObject<HTMLDivElement | null>;
   document: CanvasDocument | null;
   camera: CameraViewport;
   adapter: IndexedDBStorageAdapter | null;
@@ -85,7 +87,9 @@ export interface UseCanvasReturn {
   ) => void;
   undo: () => void;
   redo: () => void;
-  saveToFile: () => Promise<void>;
+  saveToFile: () => Promise<boolean>;
+  fileSaveState: FileSaveState;
+  importImage: (file: File | Blob, clientPoint?: Point2D) => Promise<void>;
   resetZoom: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -105,6 +109,7 @@ export function useCanvas(
   documentId: DocumentId = DEFAULT_DOC_ID,
   initialPageId?: PageId,
 ): UseCanvasReturn {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [docState, setDocState] = useState<CanvasDocument | null>(null);
   const [camera, setCamera] = useState<CameraViewport>(() => {
     return parseCameraHash() ?? { x: 0, y: 0, zoom: 1.0 };
@@ -120,6 +125,9 @@ export function useCanvas(
 
   useCameraUrlSync(camera, isLoaded);
 
+  const [storageError, setStorageError] = useState(false);
+  const [fileSaveState, setFileSaveState] = useState<FileSaveState>("browser");
+  const fileWritesRef = useRef<Promise<void>>(Promise.resolve());
   const ydocRef = useRef<Y.Doc | null>(null);
   const adapterRef = useRef<IndexedDBStorageAdapter | null>(null);
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
@@ -172,8 +180,12 @@ export function useCanvas(
     pendingDeltasRef.current = [];
     try {
       await adapter.saveDeltas(deltas);
+      if (adapterRef.current === adapter) setStorageError(false);
     } catch (error) {
-      if (adapterRef.current === adapter) pendingDeltasRef.current.unshift(...deltas);
+      if (adapterRef.current === adapter) {
+        pendingDeltasRef.current.unshift(...deltas);
+        setStorageError(true);
+      }
       console.error("[Talweg] Could not save canvas changes:", error);
     }
   }, []);
@@ -260,11 +272,42 @@ export function useCanvas(
         undoManager.on("stack-item-added", updateUndoState);
         undoManager.on("stack-item-popped", updateUndoState);
 
+        let initializing = true;
+        let fileWriteRunning = false;
+        let pendingFileWrite: { document: CanvasDocument; update: Uint8Array; handle: NativeFileSystemFileHandle } | null = null;
+        const flushLinkedFile = async () => {
+          fileWriteRunning = true;
+          try {
+            while (pendingFileWrite) {
+              const pending = pendingFileWrite;
+              pendingFileWrite = null;
+              const scene = createSceneDoc();
+              try {
+                Y.applyUpdate(scene, pending.update);
+                await saveDocumentToFileSystem(pending.document, scene, { adapter, linkedHandle: pending.handle, autoSave: true });
+              } finally { scene.destroy(); }
+            }
+            if (!storageDisposedRef.current) setFileSaveState("file");
+          } catch (error) {
+            pendingFileWrite = null;
+            console.error("[Talweg] Linked file could not be saved", error);
+            if (!storageDisposedRef.current) setFileSaveState("error");
+          } finally { fileWriteRunning = false; }
+        };
         ydoc.on("update", (update: Uint8Array, origin: unknown) => {
           const currentDoc = yDocToDocument(ydoc);
           setDocState(currentDoc);
 
           if (origin === TRANSACTION_ORIGINS.LOCAL_USER || origin === undoManager) {
+            if (!initializing) {
+              promoteTemplateDraft(documentId);
+              const handle = getLinkedFileHandle(documentId);
+              if (handle) {
+                pendingFileWrite = { document: currentDoc, update: Y.encodeStateAsUpdate(ydoc), handle };
+                setFileSaveState("saving");
+                if (!fileWriteRunning) fileWritesRef.current = flushLinkedFile();
+              }
+            }
             clockRef.current += 1;
             pendingDeltasRef.current.push({
               documentId,
@@ -314,8 +357,18 @@ export function useCanvas(
           setActivePageId("page-1");
         }
 
+        const linkedNodeId = new URLSearchParams(window.location.search).get("node") as NodeId | null;
+        const linkedNode = linkedNodeId ? initialParsedDoc.nodes[linkedNodeId] : undefined;
+        if (linkedNodeId && linkedNode) {
+          setSelectedNodeIds(new Set([linkedNodeId]));
+          if (linkedNode.pageId) setActivePageId(linkedNode.pageId);
+        }
+        setFileSaveState(getLinkedFileHandle(documentId) ? "file" : "browser");
+        initializing = false;
         const urlCamera = parseCameraHash();
-        if (urlCamera) {
+        if (linkedNode) {
+          setCamera(zoomToBounds(computeGroupBounds([linkedNode]), { width: window.innerWidth, height: window.innerHeight - 56 }, 80, .2, 1.2));
+        } else if (urlCamera) {
           setCamera(urlCamera);
         } else {
           const allNodes = Object.values(initialParsedDoc.nodes).filter(
@@ -356,7 +409,7 @@ export function useCanvas(
       ydocRef.current?.destroy();
       setAdapterState(null);
       adapterRef.current = null;
-      void adapter.close();
+      void fileWritesRef.current.then(() => adapter.close());
     };
   }, [documentId, flushDeltas]);
 
@@ -520,8 +573,13 @@ export function useCanvas(
   }, []);
 
   const saveToFile = useCallback(async () => {
-    if (!docState || !ydocRef.current) return;
-    await saveDocumentToFileSystem(docState, ydocRef.current);
+    if (!docState || !ydocRef.current) return false;
+    const saved = await saveDocumentToFileSystem(docState, ydocRef.current, { adapter: adapterRef.current });
+    if (saved.success) {
+      promoteTemplateDraft(docState.id);
+      setFileSaveState(getLinkedFileHandle(docState.id) ? "file" : "browser");
+    }
+    return saved.success;
   }, [docState]);
 
   const addNode = useCallback(
@@ -882,23 +940,26 @@ export function useCanvas(
     [],
   );
 
-  const resetZoom = useCallback(() => {
-    setCamera((prev) => ({ ...sanitizeCamera(prev), zoom: 1.0 }));
+  const updateZoom = useCallback((target: (zoom: number) => number) => {
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    setCamera((prev) => {
+      const safe = sanitizeCamera(prev);
+      return zoomAtViewportPoint(safe, { x: bounds.width / 2, y: bounds.height / 2 }, target(safe.zoom));
+    });
   }, []);
+
+  const resetZoom = useCallback(() => {
+    updateZoom(() => 1);
+  }, [updateZoom]);
 
   const zoomIn = useCallback(() => {
-    setCamera((prev) => {
-      const safe = sanitizeCamera(prev);
-      return { ...safe, zoom: getNextZoomIn(safe.zoom) };
-    });
-  }, []);
+    updateZoom((zoom) => zoom * 1.1);
+  }, [updateZoom]);
 
   const zoomOut = useCallback(() => {
-    setCamera((prev) => {
-      const safe = sanitizeCamera(prev);
-      return { ...safe, zoom: getNextZoomOut(safe.zoom) };
-    });
-  }, []);
+    updateZoom((zoom) => zoom / 1.1);
+  }, [updateZoom]);
 
   const zoomToFit = useCallback(() => {
     if (!docState) return;
@@ -908,10 +969,9 @@ export function useCanvas(
     const bounds = computeGroupBounds(allNodes);
     if (bounds.width <= 0 || bounds.height <= 0) return;
 
-    const viewportSize = {
-      width: window.innerWidth,
-      height: window.innerHeight - 40,
-    };
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const viewportSize = { width: viewport.clientWidth, height: viewport.clientHeight };
     setCamera(zoomToBounds(bounds, viewportSize, 60, 0.2, 1.8));
   }, [docState]);
 
@@ -1244,7 +1304,8 @@ export function useCanvas(
         }
 
         const screenPoint = clientPoint ?? mouseScreenRef.current;
-        const screenBounds = { x: 0, y: 56 };
+        const bounds = viewportRef.current?.getBoundingClientRect();
+        const screenBounds = { x: bounds?.left ?? 0, y: bounds?.top ?? 0 };
         const worldPoint = screenToWorld(screenPoint, cameraRef.current, screenBounds);
 
         const imageId = createId("image");
@@ -1275,27 +1336,12 @@ export function useCanvas(
           updatedAt: timestamp,
         };
 
-        ydoc.transact(() => {
-          const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
-          const rootOrder = ydoc.getArray<string>(SCENE_ROOT_ORDER_KEY);
-
-          const nodeMap = new Y.Map<unknown>();
-          for (const [key, value] of Object.entries(imageNode)) {
-            if (value !== undefined) {
-              nodeMap.set(key, toYValue(value));
-            }
-          }
-
-          nodesMap.set(imageNode.id, nodeMap);
-          rootOrder.push([imageNode.id]);
-        }, TRANSACTION_ORIGINS.LOCAL_USER);
-
-        setSelectedNodeIds(new Set([imageNode.id]));
+        addNode(imageNode);
       } catch {
-        // Suppress invalid image load failures
+        console.error("[Talweg] Could not import image");
       }
     },
-    [],
+    [addNode],
   );
 
   useEffect(() => {
@@ -1353,6 +1399,8 @@ export function useCanvas(
   }, [ingestImageFile]);
 
   return {
+    importImage: ingestImageFile,
+    viewportRef,
     document: docState,
     camera,
     adapter: adapterState,
@@ -1378,6 +1426,7 @@ export function useCanvas(
     undo,
     redo,
     saveToFile,
+    fileSaveState: storageError ? "browser-error" : fileSaveState,
     resetZoom,
     zoomIn,
     zoomOut,

@@ -1,6 +1,7 @@
 import type { CanvasDocument } from "@talweg/core";
 import {
   type IndexedDBStorageAdapter,
+  type StorageAdapter,
   deserializeTalwegFile,
   serializeTalwegFile,
 } from "@talweg/storage";
@@ -18,6 +19,7 @@ interface SaveFilePickerOptions {
 }
 
 interface OpenFilePickerOptions {
+  mode?: "read" | "readwrite";
   types?: FilePickerAcceptType[];
   multiple?: boolean;
 }
@@ -27,7 +29,7 @@ interface NativeFileSystemWritableFileStream {
   close(): Promise<void>;
 }
 
-interface NativeFileSystemFileHandle {
+export interface NativeFileSystemFileHandle {
   readonly name: string;
   createWritable(): Promise<NativeFileSystemWritableFileStream>;
   getFile(): Promise<File>;
@@ -42,6 +44,21 @@ declare global {
 
 // Retained file handle for native OS direct saves
 let activeFileHandle: NativeFileSystemFileHandle | null = null;
+let activeFileDocumentId: string | null = null;
+const fileWriteQueues = new WeakMap<NativeFileSystemFileHandle, Promise<void>>();
+const fileRequests = new WeakMap<NativeFileSystemFileHandle, number>();
+const fileWritten = new WeakMap<NativeFileSystemFileHandle, number>();
+function reserveWrite(handle: NativeFileSystemFileHandle): number {
+  const next = (fileRequests.get(handle) ?? 0) + 1;
+  fileRequests.set(handle, next);
+  return next;
+}
+
+export type FileSaveState = "browser" | "file" | "saving" | "error" | "browser-error";
+
+export function getLinkedFileHandle(documentId: string): NativeFileSystemFileHandle | null {
+  return activeFileDocumentId === documentId ? activeFileHandle : null;
+}
 
 export function getActiveFileName(): string | null {
   return activeFileHandle?.name ?? null;
@@ -53,6 +70,7 @@ export function setActiveFileHandle(handle: NativeFileSystemFileHandle | null): 
 
 export function clearActiveFileHandle(): void {
   activeFileHandle = null;
+  activeFileDocumentId = null;
 }
 
 function hasFileSystemAccess(): boolean {
@@ -113,16 +131,36 @@ function fallbackBlobUpload(): Promise<{ text: string; name: string } | null> {
 export async function saveDocumentToFileSystem(
   doc: CanvasDocument,
   ydoc: Y.Doc,
-  options?: { promptNewFile?: boolean },
+  options?: { promptNewFile?: boolean; adapter?: StorageAdapter | null; linkedHandle?: NativeFileSystemFileHandle; autoSave?: boolean },
 ): Promise<{ success: boolean; filename: string }> {
-  const jsonContent = serializeTalwegFile(doc, ydoc);
+  if (options?.autoSave && !options.linkedHandle) return { success: false, filename: "" };
+  const initialHandle = options?.linkedHandle ?? getLinkedFileHandle(doc.id);
+  let writeTicket = initialHandle ? reserveWrite(initialHandle) : 0;
+  const state = Y.encodeStateAsUpdate(ydoc);
+  const assets: Record<string, { assetId: string; mimeType: string; data: ArrayBuffer }> = {};
+  const ids = new Set(Object.values(doc.nodes).flatMap((node) => [
+    ...(node.type === "image" ? [node.data.assetId] : []),
+    ...[...(node.note ?? "").matchAll(/asset:([a-f\d]{64})/g)].map((match) => match[1] ?? ""),
+  ]));
+  for (const id of ids) {
+    const asset = await options?.adapter?.getAsset(id);
+    if (!asset) throw new Error(`Missing image asset: ${id}`);
+    assets[id] = { assetId: id, mimeType: asset.mimeType, data: asset.data };
+  }
+  const frozen = new Y.Doc();
+  let jsonContent: string;
+  try {
+    Y.applyUpdate(frozen, state);
+    jsonContent = serializeTalwegFile(doc, frozen, assets);
+  } finally { frozen.destroy(); }
   const baseName = doc.name ? doc.name.trim().replace(/[/\\?%*:|"<>]/g, "-") : "talweg-canvas";
   const defaultFilename = `${baseName}.talweg`;
 
-  if (typeof window !== "undefined" && typeof window.showSaveFilePicker === "function") {
+  if (options?.linkedHandle || (typeof window !== "undefined" && typeof window.showSaveFilePicker === "function")) {
     try {
-      let handle = activeFileHandle;
+      let handle = initialHandle;
       if (!handle || options?.promptNewFile) {
+        if (!window.showSaveFilePicker) return { success: false, filename: defaultFilename };
         handle = await window.showSaveFilePicker({
           suggestedName: defaultFilename,
           types: [
@@ -136,19 +174,29 @@ export async function saveDocumentToFileSystem(
           ],
         });
         activeFileHandle = handle;
+        activeFileDocumentId = doc.id;
+        writeTicket = reserveWrite(handle);
       }
 
-      const writable = await handle.createWritable();
-      await writable.write(jsonContent);
-      await writable.close();
+      const target = handle;
+      const pending = (fileWriteQueues.get(target) ?? Promise.resolve()).catch(() => { /* a retry may follow a failed write */ }).then(async () => {
+        if ((fileWritten.get(target) ?? 0) > writeTicket) return;
+        const writable = await target.createWritable();
+        await writable.write(jsonContent);
+        await writable.close();
+        fileWritten.set(target, writeTicket);
+      });
+      fileWriteQueues.set(target, pending);
+      await pending;
 
       return { success: true, filename: handle.name };
     } catch (err) {
+      if (options?.autoSave) throw err;
       // User cancelled picker
       if (err instanceof DOMException && err.name === "AbortError") {
         return { success: false, filename: defaultFilename };
       }
-      // Fall through to fallback blob download
+      throw err;
     }
   }
 
@@ -161,9 +209,11 @@ export async function openDocumentFromFileSystem(): Promise<{
   text: string;
   name: string;
 } | null> {
+  clearActiveFileHandle();
   if (hasFileSystemAccess() && typeof window.showOpenFilePicker === "function") {
     try {
       const [handle] = await window.showOpenFilePicker({
+        mode: "readwrite",
         types: [
           {
             description: "Talweg Canvas Document (*.talweg)",
@@ -203,6 +253,7 @@ export async function importTalwegDocument(
     throw new Error("File content exceeds maximum allowed size (100MB)");
   }
   const deserialized = deserializeTalwegFile(fileContent);
+  if (activeFileHandle) activeFileDocumentId = deserialized.doc.id;
 
   // Restore local binary assets into IndexedDB
   if (adapter) {

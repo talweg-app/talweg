@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useMemo } from "react";
 import type { ArrowNode, CanvasDocument, NodeId } from "@talweg/core";
 import {
@@ -6,21 +7,25 @@ import {
 } from "../utils/connectorGeometry.js";
 
 interface ConnectorRendererProps {
+  labelLayer: SVGSVGElement | null;
   arrow: ArrowNode;
   document: CanvasDocument;
   portSlots: PortSlotMap;
   isSelected: boolean;
   onSelect: (id: NodeId, e: React.PointerEvent) => void;
+  onEditLabel: (id: NodeId, point: { x: number; y: number }) => void;
   onHoverArrow?: (id: NodeId | null) => void;
 }
 
 export function ConnectorRenderer({
+  labelLayer,
   arrow,
   document,
   portSlots,
   isSelected,
   onSelect,
   onHoverArrow,
+  onEditLabel,
 }: ConnectorRendererProps) {
   const renderedData = useMemo(() => {
     try {
@@ -33,11 +38,16 @@ export function ConnectorRenderer({
   if (!renderedData) return null;
 
   const strokeColor = arrow.style.strokeColor ?? "#64748b";
-  const strokeWidth = arrow.style.strokeDash === "none" ? 0 : (arrow.style.strokeWidth ?? 1.5);
+  const strokeWidth =
+    arrow.style.strokeDash === "none" ? 0 : (arrow.style.strokeWidth ?? 1.5);
 
   return (
     <g
       data-node-id={arrow.id}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onEditLabel(arrow.id, { x: event.clientX, y: event.clientY });
+      }}
       className="cursor-pointer group"
       onPointerDown={(e) => {
         e.stopPropagation();
@@ -60,7 +70,16 @@ export function ConnectorRenderer({
         }}
       />
 
-      {isSelected && <path d={renderedData.lineSvgPath} fill="none" stroke="#e9dda7" strokeOpacity={0.25} strokeWidth={strokeWidth + 6} className="pointer-events-none" />}
+      {isSelected && (
+        <path
+          d={renderedData.lineSvgPath}
+          fill="none"
+          stroke="#e9dda7"
+          strokeOpacity={0.25}
+          strokeWidth={strokeWidth + 6}
+          className="pointer-events-none"
+        />
+      )}
 
       {/* Main vector line */}
       <path
@@ -107,34 +126,61 @@ export function ConnectorRenderer({
       )}
 
       {/* Edge label */}
-      {arrow.data.label && (
-        <g
-          transform={`translate(${String(renderedData.midpoint.x)}, ${String(renderedData.midpoint.y)})`}
-          className="pointer-events-none select-none"
-        >
-          <rect
-            x={-arrow.data.label.length * 3.5 - 6}
-            y={-10}
-            width={arrow.data.label.length * 7 + 12}
-            height={18}
-            rx={3}
-            fill="#090a0f"
-            stroke="#27272a"
-            strokeWidth={1}
+      {arrow.data.label &&
+        renderedData.labelAnchor &&
+        Math.hypot(
+          renderedData.midpoint.x - renderedData.labelAnchor.x,
+          renderedData.midpoint.y - renderedData.labelAnchor.y,
+        ) > 1 && (
+          <line
+            x1={renderedData.labelAnchor.x}
+            y1={renderedData.labelAnchor.y}
+            x2={renderedData.midpoint.x}
+            y2={renderedData.midpoint.y}
+            stroke={strokeColor}
+            strokeWidth={0.75}
+            strokeDasharray="3 3"
+            opacity={0.5}
+            className="pointer-events-none"
           />
-          <text
-            x={0}
-            y={3}
-            textAnchor="middle"
-            fill={arrow.style.textColor ?? "#a1a1aa"}
-            fontSize={10}
-            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-            fontWeight={500}
+        )}
+      {arrow.data.label &&
+        labelLayer &&
+        createPortal(
+          <g
+            transform={`translate(${String(renderedData.midpoint.x)}, ${String(renderedData.midpoint.y)})`}
+            data-testid="connector-label"
+            data-node-id={arrow.id}
+            className="pointer-events-auto cursor-pointer select-none"
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              onEditLabel(arrow.id, { x: event.clientX, y: event.clientY });
+            }}
           >
-            {arrow.data.label}
-          </text>
-        </g>
-      )}
+            <rect
+              x={-arrow.data.label.length * 3.5 - 6}
+              y={-10}
+              width={arrow.data.label.length * 7 + 12}
+              height={18}
+              rx={3}
+              fill="#090a0f"
+              stroke="#27272a"
+              strokeWidth={1}
+            />
+            <text
+              x={0}
+              y={3}
+              textAnchor="middle"
+              fill={arrow.style.textColor ?? "#a1a1aa"}
+              fontSize={10}
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontWeight={500}
+            >
+              {arrow.data.label}
+            </text>
+          </g>,
+          labelLayer,
+        )}
     </g>
   );
 }

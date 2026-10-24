@@ -16,6 +16,8 @@ import {
   nodeToBoundingBox,
 } from "../utils/connectorGeometry.js";
 
+import { useTranslation } from "../hooks/useTranslation.js";
+
 const PORT_HIT_RADIUS = 30;
 const COMPASS_FACES: readonly CompassAnchor[] = ["n", "s", "e", "w"];
 
@@ -87,12 +89,13 @@ function EndpointHandle({
   active: boolean;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
+  const { t } = useTranslation();
   const isSource = endpoint === "source";
 
   return (
     <button
       type="button"
-      aria-label={isSource ? "Reconnect arrow source" : "Reconnect arrow target"}
+      aria-label={t(isSource ? "canvas.reconnectSource" : "canvas.reconnectTarget")}
       data-arrow-endpoint={endpoint}
       className={`absolute rounded-full border-2 shadow-lg pointer-events-auto cursor-crosshair transition-colors ${
         isSource

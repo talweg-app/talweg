@@ -25,7 +25,7 @@ export function ZoomControls({
         // canvas pointer capture retargets the click away from the button
         e.stopPropagation();
       }}
-      className="absolute bottom-4 right-4 z-30 flex items-center bg-[#131518] border border-white/[0.08] rounded shadow-md select-none"
+      className="canvas-zoom-panel absolute bottom-4 right-4 z-30 flex items-center bg-[#131518] border border-white/[0.08] rounded shadow-md select-none"
     >
       <button
         type="button"

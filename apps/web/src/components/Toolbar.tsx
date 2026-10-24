@@ -11,8 +11,6 @@ import {
   Pill,
   Redo2,
   Square,
-  StickyNote,
-  CreditCard,
   Trash2,
   Undo2,
 } from "lucide-react";
@@ -62,7 +60,7 @@ function ToolbarButton({
       aria-label={label}
       aria-pressed={active}
       title={tooltip}
-      className={`group relative flex items-center justify-center w-9 h-9 rounded-md transition ${
+      className={`canvas-tool-button group relative flex items-center justify-center w-9 h-9 rounded-md transition ${
         active
           ? "bg-[#e9dda7] text-[#202223]"
           : disabled
@@ -121,15 +119,13 @@ export function Toolbar({
 
     return [
       ...baseTools,
-      { id: "sticker" as ToolType, label: t("tools.sticker"), tooltip: t("tooltips.sticker"), icon: StickyNote },
-      { id: "card" as ToolType, label: t("tools.card"), tooltip: t("tooltips.card"), icon: CreditCard },
       { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
       { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
     ];
   })();
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 p-1 bg-[#202223] border border-[#3b3e3e] rounded-xl shadow-lg select-none">
+    <div className="canvas-toolbar fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 p-1 bg-[#202223] border border-[#3b3e3e] rounded-xl shadow-lg select-none">
       {tools.map((tool) => {
         const Icon = tool.icon;
         return (

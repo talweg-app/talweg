@@ -1,8 +1,9 @@
-import type { CanvasNode } from "@talweg/core";
+import type { CanvasNode, NodeStyle, TextRun } from "@talweg/core";
 
 export function drawNode(
   ctx: CanvasRenderingContext2D,
   node: CanvasNode,
+  image?: HTMLImageElement,
 ): void {
   const { width, height, style } = node;
   const radius =
@@ -45,26 +46,73 @@ export function drawNode(
     y: number,
     maxWidth: number,
     centered = false,
+    field = "label",
+    override?: NodeStyle,
   ) => {
+    const paintColor = override?.textColor ?? textColor;
+    const paintSize = override?.fontSize ?? fontSize;
+    const paintAlign = override?.textAlign === "justify" ? "left" : (override?.textAlign ?? align);
+    const weight = override?.fontWeight ?? style.fontWeight ?? 400;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
     ctx.clip();
-    ctx.fillStyle = textColor;
-    ctx.font = `${String(style.fontWeight ?? 400)} ${String(fontSize)}px ${style.fontFamily ?? "sans-serif"}`;
-    ctx.textAlign = align;
+    ctx.fillStyle = paintColor;
+    ctx.font = `${String(weight === "medium" ? 500 : weight === "semibold" ? 600 : weight)} ${String(paintSize)}px ${style.fontFamily ?? "sans-serif"}`;
+    ctx.textAlign = paintAlign;
     ctx.textBaseline = "top";
+    const runs = node.textRuns?.[field];
     const lines = content.split("\n");
-    const lineHeight = fontSize * 1.5;
+    const lineHeight = Math.max(paintSize, ...(runs ?? []).map((run) => run.fontSize ?? paintSize)) * 1.5;
     const startY = centered ? y - (lines.length * lineHeight) / 2 : y;
     const textX =
-      align === "center"
+      paintAlign === "center"
         ? x + maxWidth / 2
-        : align === "right"
+        : paintAlign === "right"
           ? x + maxWidth
           : x;
+    let offset = 0;
     lines.forEach((line, index) => {
-      ctx.fillText(line, textX, startY + index * lineHeight, maxWidth);
+      const y = startY + index * lineHeight;
+      if (runs?.map((run) => run.text).join("") !== content)
+        ctx.fillText(line, textX, y, maxWidth);
+      else {
+        const fontFor = (run: TextRun) => `${run.italic ? "italic " : ""}${String(run.bold === undefined ? (weight === "medium" ? 500 : weight === "semibold" ? 600 : weight) : run.bold ? 700 : 400)} ${String(run.fontSize ?? paintSize)}px ${style.fontFamily ?? "sans-serif"}`;
+        let runOffset = 0;
+        const fragments: { run: TextRun; fragment: string; width: number }[] = [];
+        for (const run of runs) {
+          const from = Math.max(0, offset - runOffset);
+          const to = Math.min(run.text.length, offset + line.length - runOffset);
+          if (from < to) {
+            const fragment = run.text.slice(from, to);
+            ctx.font = fontFor(run);
+            fragments.push({ run, fragment, width: ctx.measureText(fragment).width });
+          }
+          runOffset += run.text.length;
+        }
+        const measured = fragments.reduce((sum, fragment) => sum + fragment.width, 0);
+        const scale = Math.min(1, maxWidth / Math.max(measured, 1));
+        const startX = paintAlign === "center" ? textX - measured * scale / 2 : paintAlign === "right" ? textX - measured * scale : textX;
+        ctx.save();
+        ctx.translate(startX, y);
+        ctx.scale(scale, 1);
+        ctx.textAlign = "left";
+        let advance = 0;
+        for (const { run, fragment, width: fragmentWidth } of fragments) {
+          ctx.font = fontFor(run);
+          ctx.fillStyle = run.color ?? paintColor;
+          ctx.fillText(fragment, advance, 0);
+          ctx.strokeStyle = ctx.fillStyle;
+          ctx.lineWidth = Math.max(1, (run.fontSize ?? paintSize) / 16);
+          for (const position of [run.underline || run.href ? (run.fontSize ?? paintSize) * 1.1 : null, run.strike ? (run.fontSize ?? paintSize) * .55 : null]) {
+            if (position === null) continue;
+            ctx.beginPath(); ctx.moveTo(advance, position); ctx.lineTo(advance + fragmentWidth, position); ctx.stroke();
+          }
+          advance += fragmentWidth;
+        }
+        ctx.restore();
+      }
+      offset += line.length + 1;
     });
     ctx.restore();
   };
@@ -112,23 +160,30 @@ export function drawNode(
       text(node.data?.label ?? "", 12, height / 2, width - 24, true);
       break;
     case "text":
-      text(node.data.text, 8, 8, width - 16);
+      text(node.data.text, 8, 8, width - 16, false, "text");
       break;
     case "sticker":
-      text(node.data.content, 14, 14, width - 28);
+      text(node.data.content, 14, 14, width - 28, false, "content");
       break;
     case "card":
-      text(node.data.title, 16, 16, width - 32);
+      text(node.data.title, 16, 16, width - 32, false, "title");
       text(
         node.data.status?.replaceAll("_", " ") ?? "todo",
         16,
         48,
         width - 32,
       );
-      text(node.data.description ?? "", 16, 80, width - 32);
+      text(
+        node.data.description ?? "",
+        16,
+        80,
+        width - 32,
+        false,
+        "description",
+      );
       break;
     case "checklist":
-      text(node.data.title, 16, 16, width - 32);
+      text(node.data.title, 16, 16, width - 32, false, "title");
       node.data.items.forEach((entry, index) => {
         const y = 52 + index * 34;
         if (y + 20 > height) return;
@@ -145,8 +200,28 @@ export function drawNode(
           ctx.lineTo(28, y + 4);
           ctx.stroke();
         }
-        text(entry.text, 38, y, width - 54);
+        text(entry.text, 38, y, width - 54, false, `task:${entry.id}`);
       });
+      break;
+    case "image": {
+      if (image) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(0, 0, width, height, radius);
+        ctx.clip();
+        const scale = Math.min(
+          width / image.naturalWidth,
+          height / image.naturalHeight,
+        );
+        const w = image.naturalWidth * scale;
+        const h = image.naturalHeight * scale;
+        ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+        ctx.restore();
+      }
+      break;
+    }
+    case "markdown":
+      text(node.data.title || "Markdown", 16, 16, width - 32, false, "title");
       break;
     case "table": {
       const rows = node.data.cells.length;

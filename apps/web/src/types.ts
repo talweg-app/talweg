@@ -24,6 +24,8 @@ export type CanvasMode = "whiteboard" | "diagrams" | "mindmap";
 export type ArrowEndpoint = "source" | "target";
 
 export type ToolType =
+  | "markdown"
+  | "image"
   | "ellipse"
   | "text"
   | "table"

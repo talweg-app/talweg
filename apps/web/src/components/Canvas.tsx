@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ArrowNode,
@@ -12,12 +13,11 @@ import {
   type Point2D,
   type ResizeHandle,
   type TransformBox2D,
+  type TextRun,
   computeGroupBounds,
   panByScreenDelta,
   resizeTransformBox,
-  sanitizeCamera,
   screenToWorld,
-  zoomAtViewportPoint,
 } from "@talweg/core";
 import type { Anchor } from "@talweg/router";
 import type { StorageAdapter } from "@talweg/storage";
@@ -30,6 +30,10 @@ import type {
 } from "../types.js";
 import { buildPortSlotMap } from "../utils/connectorGeometry.js";
 import { createId } from "../utils/template.js";
+import { readableTextColor } from "../utils/textRuns.js";
+import { useTranslation } from "../hooks/useTranslation.js";
+import { useCanvasGestures } from "../hooks/useCanvasGestures.js";
+import { resizeNodeContent } from "../utils/resizeNodeContent.js";
 import { createCanvasNode } from "../utils/createCanvasNode.js";
 import { ArrowSelectionOverlay } from "./ArrowSelectionOverlay.js";
 import { ConnectorRenderer } from "./ConnectorRenderer.js";
@@ -40,6 +44,8 @@ import { SelectionBox } from "./SelectionBox.js";
 import { ZoomControls } from "./ZoomControls.js";
 
 interface CanvasProps {
+  viewportRef: React.RefObject<HTMLDivElement | null>;
+  onImportImage: (file: File | Blob, clientPoint?: Point2D) => Promise<void>;
   document: CanvasDocument | null;
   camera: CameraViewport;
   onCameraChange: React.Dispatch<React.SetStateAction<CameraViewport>>;
@@ -98,6 +104,8 @@ const snap16 = (value: number): number => Math.round(value / 16) * 16;
 const EMPTY_PORT_SLOTS: ReadonlyMap<string, Anchor> = new Map();
 
 export function Canvas({
+  viewportRef: containerRef,
+  onImportImage,
   document,
   camera,
   onCameraChange,
@@ -129,121 +137,37 @@ export function Canvas({
   onRenamePage,
   onDeletePage,
 }: CanvasProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
+  const [hintDismissed, setHintDismissed] = useState(false);
+  useEffect(() => {
+    const dismiss = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest(".canvas-empty-state button")) return;
+      setHintDismissed(true);
+    };
+    window.addEventListener("pointerdown", dismiss, { capture: true, once: true });
+    window.addEventListener("keydown", dismiss, { capture: true, once: true });
+    window.addEventListener("wheel", dismiss, { capture: true, passive: true, once: true });
+    return () => {
+      window.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("keydown", dismiss, true);
+      window.removeEventListener("wheel", dismiss, true);
+    };
+  }, []);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imagePointRef = useRef<Point2D | undefined>(undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [connectingSourceId, setConnectingSourceId] = useState<NodeId | null>(null);
   const [connectingSourceAnchor, setConnectingSourceAnchor] = useState<CompassAnchor | null>(null);
   const [hoveredArrowId, setHoveredArrowId] = useState<NodeId | null>(null);
+  const [labelLayer, setLabelLayer] = useState<SVGSVGElement | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Local optimistic drag and resize positions for zero-latency 60fps interaction
   const [dragOffsets, setDragOffsets] = useState<ReadonlyMap<NodeId, Point2D>>(new Map());
   const [resizeOffsets, setResizeOffsets] = useState<{ id: NodeId; box: TransformBox2D } | null>(null);
 
-  // Native trackpad & wheel gesture pipeline:
-  // - Trackpad 2-finger pan (continuous 2D delta)
-  // - Trackpad pinch / Ctrl+wheel (smooth exponential zoom at cursor)
-  // - Discrete mouse wheel (stepped notch zoom at cursor)
-  // - Safari gesture events (hardware-accelerated trackpad pinch)
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const zoomAtCursor = (clientX: number, clientY: number, factor: number) => {
-      const rect = container.getBoundingClientRect();
-      const viewportPoint: Point2D = {
-        x: clientX - rect.left,
-        y: clientY - rect.top,
-      };
-      onCameraChange((prev) => {
-        const safe = sanitizeCamera(prev);
-        return zoomAtViewportPoint(safe, viewportPoint, safe.zoom * factor);
-      });
-    };
-
-    const handleWheel = (e: WheelEvent) => {
-      if (e.target instanceof Element && e.target.closest("[data-testid=canvas-context-menu]")) return;
-      e.preventDefault();
-
-      const deltaFactor = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1;
-      const dx = e.deltaX * deltaFactor;
-      const dy = e.deltaY * deltaFactor;
-
-      // Trackpad pinch-to-zoom is synthesized by browsers as ctrlKey + wheel
-      if (e.ctrlKey || e.metaKey) {
-        const isDiscrete =
-          e.deltaMode !== 0 ||
-          (e.deltaX === 0 && e.deltaY % 1 === 0 && Math.abs(e.deltaY) >= 40);
-        const k = isDiscrete ? 0.0015 : 0.01;
-        zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * k));
-        return;
-      }
-
-      if (e.shiftKey) {
-        const panDx = dx !== 0 ? dx : dy;
-        onCameraChange((prev) => panByScreenDelta(sanitizeCamera(prev), { x: -panDx, y: 0 }));
-        return;
-      }
-
-      // pixel-mode streams with fractional deltas or any lateral motion are
-      // trackpad scroll; whole single-axis ticks are a physical wheel
-      const isTrackpadScroll =
-        e.deltaX !== 0 ||
-        (e.deltaMode === 0 && (e.deltaY % 1 !== 0 || Math.abs(e.deltaY) < 40));
-
-      if (isTrackpadScroll) {
-        onCameraChange((prev) =>
-          panByScreenDelta(sanitizeCamera(prev), { x: -dx, y: -dy }),
-        );
-        return;
-      }
-
-      // wheel tick: scrolling down zooms out, scrolling up zooms in
-      zoomAtCursor(e.clientX, e.clientY, Math.exp(-dy * 0.0015));
-    };
-
-    // Safari macOS proprietary trackpad pinch
-    let lastGestureScale = 1;
-    const handleGestureStart = (e: Event) => {
-      e.preventDefault();
-      lastGestureScale = 1;
-    };
-
-    const handleGestureChange = (e: Event) => {
-      e.preventDefault();
-      const ge = e as Event & { clientX: number; clientY: number; scale: number };
-      const factor = ge.scale / lastGestureScale;
-      lastGestureScale = ge.scale;
-      zoomAtCursor(ge.clientX, ge.clientY, factor);
-    };
-
-    const handleGestureEnd = (e: Event) => {
-      e.preventDefault();
-      lastGestureScale = 1;
-    };
-
-    container.addEventListener("wheel", handleWheel, { passive: false });
-    container.addEventListener("gesturestart", handleGestureStart, { passive: false });
-    container.addEventListener("gesturechange", handleGestureChange, { passive: false });
-    container.addEventListener("gestureend", handleGestureEnd, { passive: false });
-
-    // Block browser-level tab zooming when Ctrl+Wheeling near edges
-    const preventWindowZoom = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-      }
-    };
-    window.addEventListener("wheel", preventWindowZoom, { passive: false });
-
-    return () => {
-      container.removeEventListener("wheel", handleWheel);
-      container.removeEventListener("gesturestart", handleGestureStart);
-      container.removeEventListener("gesturechange", handleGestureChange);
-      container.removeEventListener("gestureend", handleGestureEnd);
-      window.removeEventListener("wheel", preventWindowZoom);
-    };
-  }, [onCameraChange]);
+  useCanvasGestures(containerRef, onCameraChange);
 
   // Spacebar tracking for Pan mode
   useEffect(() => {
@@ -304,13 +228,19 @@ export function Canvas({
 
   const createNodeAt = useCallback(
     (tool: ToolType, worldPoint: Point2D): boolean => {
+      if (tool === "image") {
+        const bounds = containerRef.current?.getBoundingClientRect();
+        imagePointRef.current = { x: (worldPoint.x + camera.x) * camera.zoom + (bounds?.left ?? 0), y: (worldPoint.y + camera.y) * camera.zoom + (bounds?.top ?? 0) };
+        imageInputRef.current?.click();
+        return true;
+      }
       const node = createCanvasNode(tool, worldPoint, mode);
       if (!node) return false;
       onAddNode(node);
       onSelectTool("select");
       return true;
     },
-    [mode, onAddNode, onSelectTool],
+    [mode, onAddNode, onSelectTool, camera, containerRef],
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -530,7 +460,9 @@ export function Canvas({
     }
 
     if (dragState?.mode === "resize" && resizeOffsets && onUpdateNode) {
+      const resized = document?.nodes[resizeOffsets.id];
       onUpdateNode(resizeOffsets.id, {
+        ...(resized ? resizeNodeContent(resized, resizeOffsets.box) : {}),
         x: Math.round(resizeOffsets.box.x),
         y: Math.round(resizeOffsets.box.y),
         width: Math.round(resizeOffsets.box.width),
@@ -673,7 +605,7 @@ export function Canvas({
       const existing = modifiedNodes[resizeOffsets.id];
       if (existing) {
         modifiedNodes[resizeOffsets.id] = {
-          ...existing,
+          ...resizeNodeContent(existing, resizeOffsets.box),
           x: Math.round(resizeOffsets.box.x),
           y: Math.round(resizeOffsets.box.y),
           width: Math.round(resizeOffsets.box.width),
@@ -692,6 +624,16 @@ export function Canvas({
     () => (renderedDocument ? buildPortSlotMap(renderedDocument) : EMPTY_PORT_SLOTS),
     [renderedDocument],
   );
+
+  const sceneNodes = useMemo(() => {
+    const arrows: ArrowNode[] = [];
+    const shapes: CanvasNode[] = [];
+    for (const node of Object.values(renderedDocument?.nodes ?? {})) {
+      if (node.type === "arrow") arrows.push(node);
+      else shapes.push(node);
+    }
+    return { arrows, shapes };
+  }, [renderedDocument]);
 
   const selectedArrows = useMemo(() => {
     if (!renderedDocument) return [];
@@ -733,7 +675,7 @@ export function Canvas({
       data-testid="canvas"
       className={`relative w-full h-full overflow-hidden overscroll-none bg-[#101112] select-none touch-none ${cursorClass}`}
       style={{
-        backgroundImage: "radial-gradient(circle, rgba(255, 255, 255, 0.065) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(circle, rgba(255, 255, 255, 0.055) 1px, transparent 1px)",
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
         backgroundPosition: `${String(gridOffsetX)}px ${String(gridOffsetY)}px`,
       }}
@@ -749,6 +691,7 @@ export function Canvas({
         setDragState(null);
         setContextMenu({
           nodeId,
+          cellKey: e.target instanceof Element ? e.target.closest("[data-table-cell]")?.getAttribute("data-table-cell") ?? null : null,
           clientPoint: { x: e.clientX, y: e.clientY },
           worldPoint: toWorld(e.clientX, e.clientY),
         });
@@ -759,26 +702,36 @@ export function Canvas({
         }
       }}
     >
+      <input ref={imageInputRef} type="file" accept="image/*" multiple hidden aria-label={t("canvas.importImages")} onChange={(event) => {
+        const files = Array.from(event.currentTarget.files ?? []);
+        event.currentTarget.value = "";
+        for (const file of files) void onImportImage(file, imagePointRef.current);
+      }} />
       {/* World Space Transformed Container */}
       {renderedDocument && (
         <div
+          data-testid="canvas-world"
           className="absolute inset-0 pointer-events-none origin-top-left"
           style={{
             transform: `matrix(${String(camera.zoom)}, 0, 0, ${String(camera.zoom)}, ${String(camera.x * camera.zoom)}, ${String(camera.y * camera.zoom)})`,
           }}
         >
           {/* SVG Layer for routed edge connectors */}
-          <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
-            {Object.values(renderedDocument.nodes)
-              .filter((n): n is typeof n & { type: "arrow" } => n.type === "arrow")
+          <svg focusable="false" className="canvas-connector-layer absolute inset-0 w-full h-full overflow-visible pointer-events-none">
+            {sceneNodes.arrows
               .map((arrow) => (
                 <ConnectorRenderer
                   key={arrow.id}
                   arrow={arrow}
+                  labelLayer={labelLayer}
                   document={renderedDocument}
                   portSlots={portSlots}
                   isSelected={selectedNodeIds.has(arrow.id)}
                   onSelect={handleNodeSelect}
+                  onEditLabel={(id, point) => {
+                    onSelectNodeIds(new Set([id]));
+                    setContextMenu({ nodeId: id, clientPoint: point, worldPoint: toWorld(point.x, point.y) });
+                  }}
                   onHoverArrow={setHoveredArrowId}
                 />
               ))}
@@ -786,18 +739,21 @@ export function Canvas({
 
           {/* HTML Nodes Layer */}
           <div className="absolute inset-0 pointer-events-none">
-            {Object.values(renderedDocument.nodes)
-              .filter((n) => n.type !== "arrow")
+            {sceneNodes.shapes
               .map((node) => (
                 <NodeRenderer
                   key={node.id}
                   node={node}
                   adapter={adapter}
-                  mode={mode}
                   isSelected={selectedNodeIds.has(node.id)}
                   isPanActive={isSpacePressed || activeTool === "pan"}
                   onSelect={handleNodeSelect}
                   onUpdateData={onUpdateNodeData}
+                  onUpdateRuns={(id, field, runs: TextRun[]) => {
+                    const node = document?.nodes[id];
+                    if (node && JSON.stringify(node.textRuns?.[field] ?? []) !== JSON.stringify(runs)) onUpdateNode?.(id, { textRuns: { ...node.textRuns, [field]: runs } });
+                  }}
+                  onUpdateNote={(id, note) => { onUpdateNode?.(id, { note }); }}
                   onStartConnect={(sourceId, anchor) => {
                     setConnectingSourceId(sourceId);
                     setConnectingSourceAnchor(anchor ?? "e");
@@ -805,6 +761,8 @@ export function Canvas({
                 />
               ))}
           </div>
+
+          <svg data-testid="canvas-label-layer" ref={setLabelLayer} focusable="false" className="canvas-connector-layer absolute inset-0 w-full h-full overflow-visible pointer-events-none" style={{ zIndex: 2147483646 }} />
 
           {/* 8-Point Selection Handles Layer */}
           {selectedNodeIds.size === 1 &&
@@ -850,11 +808,20 @@ export function Canvas({
         </div>
       )}
 
+      {!hintDismissed && renderedDocument && sceneNodes.shapes.length === 0 && sceneNodes.arrows.length === 0 && (
+        <div className="canvas-empty-state">
+          <div className="canvas-empty-symbol"><Plus size={22} strokeWidth={1.2} /></div>
+          <h2>{t("canvas.emptyTitle")}</h2>
+          <p>{t("canvas.emptyDescription")}</p>
+          <button type="button" onPointerDown={(event) => { event.stopPropagation(); }} onClick={() => { setHintDismissed(true); window.dispatchEvent(new Event("talweg:insert")); }}><Plus size={13} />{t("canvas.emptyAction")}</button>
+        </div>
+      )}
+
       {/* Floating Status Badge when Connecting Nodes */}
       {connectingSourceId && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#16181c] border border-white/[0.08] text-neutral-300 px-3 h-8 flex items-center rounded text-xs shadow-md pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400/90 mr-1.5" />
-          <span>Click target node to connect</span>
+          <span>{t("canvas.connectHint")}</span>
         </div>
       )}
 
@@ -863,11 +830,30 @@ export function Canvas({
           state={contextMenu}
           mode={mode}
           nodes={contextMenu.nodeId && document
-            ? [...selectedNodeIds].map((id) => document.nodes[id]).filter((node): node is CanvasNode => !!node)
+            ? [...selectedNodeIds].map((id) => {
+                const node = document.nodes[id];
+                if (node?.type === "table" && contextMenu.cellKey) return { ...node, style: { ...node.style, ...node.data.cellStyles?.[contextMenu.cellKey] } };
+                return node;
+              }).filter((node): node is CanvasNode => !!node)
             : []}
-          onUpdateStyle={(style) => {
-            for (const id of selectedNodeIds) onUpdateNodeStyle(id, { ...style });
+          onEditNote={(id) => {
+            const node = document?.nodes[id];
+            if (node && typeof node.note !== "string") onUpdateNode?.(id, { note: "" });
+            window.dispatchEvent(new CustomEvent("talweg:edit-note", { detail: id }));
           }}
+          onRemoveNote={(id) => { onUpdateNode?.(id, { note: null }); }}
+          onUpdateLabel={(id, label) => { onUpdateNodeData(id, { label }); }}
+          onUpdateStyle={(style) => {
+            for (const id of selectedNodeIds) {
+              const node = document?.nodes[id];
+              const nextStyle = { ...style };
+              if (node?.type === "table" && style.fillColor) nextStyle.textColor = readableTextColor(style.fillColor);
+              if (node?.type === "table" && contextMenu.cellKey) {
+                onUpdateNodeData(id, { cellStyles: { ...node.data.cellStyles, [contextMenu.cellKey]: { ...node.data.cellStyles?.[contextMenu.cellKey], ...nextStyle } } });
+              } else onUpdateNodeStyle(id, nextStyle);
+            }
+          }}
+          onTableScope={() => { setContextMenu({ ...contextMenu, cellKey: null }); }}
           onDuplicate={() => {
             if (!document) return;
             const copies = [...selectedNodeIds].flatMap((id) => {

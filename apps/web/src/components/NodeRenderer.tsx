@@ -1,45 +1,30 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from "react";
 import type {
   CanvasNode,
-  CapsuleNode,
-  CardNode,
   CardStatus,
   CompassAnchor,
-  CylinderNode,
-  DiamondNode,
-  ImageNode,
   NodeId,
-  RectangleNode,
-  EllipseNode,
-  StickerNode,
-  TextNode,
+  TextRun,
 } from "@talweg/core";
 import type { StorageAdapter } from "@talweg/storage";
-import { CheckCircle2, Circle, Clock, Flame } from "lucide-react";
+import { CheckCircle2, Circle, Clock, FileText, Flame } from "lucide-react";
 import { useTranslation } from "../hooks/useTranslation.js";
-import type { CanvasMode } from "../types.js";
-import { getCachedAssetUrl, resolveAssetUrl } from "../utils/assets.js";
 import { StructuredNodeContent } from "./StructuredNodeContent.js";
+import { RichText } from "./RichText.js";
+import { AssetImage } from "./AssetImage.js";
+const NoteEditor = lazy(async () => { const module = await import("./NoteEditor.js"); return { default: module.NoteEditor }; });
 
 interface NodeRendererProps {
   node: CanvasNode;
   isSelected: boolean;
-  mode: CanvasMode;
   isPanActive?: boolean;
   adapter?: StorageAdapter | null | undefined;
-  onSelect: (id: NodeId, e: React.PointerEvent) => void;
+  onSelect: (id: NodeId, event: React.PointerEvent) => void;
   onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
+  onUpdateRuns: (id: NodeId, field: string, runs: TextRun[]) => void;
+  onUpdateNote: (id: NodeId, note: string) => void;
   onStartConnect?: (sourceId: NodeId, anchor?: CompassAnchor) => void;
 }
-
-const CARD_STATUS_CYCLE: CardStatus[] = ["todo", "in_progress", "done", "blocked"];
-
-const PORT_TITLE: Record<CompassAnchor, string> = {
-  n: "Connect North (N)",
-  s: "Connect South (S)",
-  w: "Connect West (W)",
-  e: "Connect East (E)",
-};
 
 const PORT_POSITION: Record<CompassAnchor, string> = {
   n: "-top-1.5 left-1/2 -translate-x-1/2",
@@ -47,6 +32,7 @@ const PORT_POSITION: Record<CompassAnchor, string> = {
   w: "-left-1.5 top-1/2 -translate-y-1/2",
   e: "-right-1.5 top-1/2 -translate-y-1/2",
 };
+const CARD_STATUS: CardStatus[] = ["todo", "in_progress", "done", "blocked"];
 
 export function NodeRenderer({
   node,
@@ -55,33 +41,99 @@ export function NodeRenderer({
   adapter,
   onSelect,
   onUpdateData,
+  onUpdateRuns,
+  onUpdateNote,
   onStartConnect,
 }: NodeRendererProps) {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
-
-  if (node.type === "arrow" || node.type === "group") {
-    return null;
-  }
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 && e.button !== 1) return;
-    if (e.target instanceof Element && e.target.closest("input, textarea, button") && isSelected) { e.stopPropagation(); return; }
-    onSelect(node.id, e);
+  const [noteOpen, setNoteOpen] = useState(false);
+  useEffect(() => {
+    if (!isSelected) return;
+    const openNote = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail === node.id) setNoteOpen(true);
+    };
+    window.addEventListener("talweg:edit-note", openNote);
+    return () => { window.removeEventListener("talweg:edit-note", openNote); };
+  }, [isSelected, node.id]);
+  const closeNote = useCallback(() => {
+    setNoteOpen(false);
+  }, []);
+  if (node.type === "arrow" || node.type === "group") return null;
+  const typography: CSSProperties = {
+    color:
+      node.style.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"),
+    fontSize: node.style.fontSize ?? 14,
+    fontWeight: node.style.fontWeight ?? 400,
+    fontFamily: node.style.fontFamily,
+    textAlign:
+      node.style.textAlign ??
+      (["rectangle", "ellipse", "diamond", "capsule", "cylinder"].includes(
+        node.type,
+      )
+        ? "center"
+        : "left"),
   };
-
-  const handleCycleStatus = (e: React.MouseEvent, currentStatus?: CardStatus) => {
-    e.stopPropagation();
-    const currentIndex = CARD_STATUS_CYCLE.indexOf(currentStatus ?? "todo");
-    const nextStatus = CARD_STATUS_CYCLE[(currentIndex + 1) % CARD_STATUS_CYCLE.length] ?? "todo";
-    onUpdateData(node.id, { status: nextStatus });
+  const surface: CSSProperties = {
+    backgroundColor:
+      node.style.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"),
+    borderColor: node.style.strokeColor ?? "#727777",
+    borderWidth:
+      node.style.strokeDash === "none" ? 0 : (node.style.strokeWidth ?? 1),
+    borderStyle:
+      node.style.strokeDash === "dashed"
+        ? "dashed"
+        : node.style.strokeDash === "dotted"
+          ? "dotted"
+          : "solid",
+    borderRadius:
+      typeof node.style.cornerRadius === "number" ? node.style.cornerRadius : 6,
   };
-
-  const selectionRing = isSelected
-    ? "ring-1 ring-amber-500/80 shadow-lg shadow-black/40"
-    : "hover:ring-1 hover:ring-white/20";
-
-  const cursorClass = isPanActive ? "cursor-inherit" : "cursor-move";
+  const rich = (
+    field: string,
+    text: string,
+    label: string,
+    editing = true,
+    multiline = true,
+  ) => (
+    <RichText
+      text={text}
+      runs={node.textRuns?.[field]}
+      label={label}
+      placeholder={label}
+      editing={editing}
+      multiline={multiline}
+      autoFocus={isEditing}
+      style={typography}
+      onBlur={() => {
+        setIsEditing(false);
+      }}
+      onCommit={(nextText, runs) => {
+        onUpdateData(node.id, { [field]: nextText });
+        onUpdateRuns(node.id, field, runs);
+      }}
+    />
+  );
+  const isShape =
+    node.type === "rectangle" ||
+    node.type === "ellipse" ||
+    node.type === "diamond" ||
+    node.type === "capsule" ||
+    node.type === "cylinder";
+  const strokeDasharray =
+    node.style.strokeDash === "dashed"
+      ? "8 5"
+      : node.style.strokeDash === "dotted"
+        ? "2 4"
+        : undefined;
+  const svgStyle = {
+    fill: node.style.fillColor ?? "#242729",
+    stroke: node.style.strokeColor ?? "#727777",
+    strokeWidth:
+      node.style.strokeDash === "none" ? 0 : (node.style.strokeWidth ?? 1),
+    strokeDasharray,
+    vectorEffect: "non-scaling-stroke",
+  };
 
   return (
     <div
@@ -96,590 +148,202 @@ export function NodeRenderer({
         zIndex: node.zIndex,
         opacity: node.opacity,
       }}
-      className={`absolute pointer-events-auto ${cursorClass} select-none transition-shadow ${selectionRing}`}
-      onPointerDown={handlePointerDown}
-      onDoubleClick={() => {
-        setIsEditing(true);
+      className={`absolute pointer-events-auto select-none ${isPanActive ? "cursor-inherit" : "cursor-move"} ${isSelected ? "ring-1 ring-amber-500/80" : "hover:ring-1 hover:ring-white/20"}`}
+      onPointerDown={(event) => {
+        if (event.button !== 0 && event.button !== 1) return;
+        if (
+          !isPanActive &&
+          event.button === 0 &&
+          event.target instanceof Element &&
+          event.target.closest(
+            'input, textarea, button, [contenteditable="true"]',
+          ) &&
+          isSelected
+        ) {
+          event.stopPropagation();
+          return;
+        }
+        onSelect(node.id, event);
+      }}
+      onDoubleClick={(event) => {
+        if (event.target instanceof Element && !event.target.closest("button"))
+          setIsEditing(true);
       }}
     >
-      {/* Compass Snap Ports (N, S, E, W) */}
-      {isSelected && onStartConnect && (
-        <>
-          {(["n", "s", "w", "e"] as const).map((anchor) => (
-            <button
-              key={anchor}
-              type="button"
-              className={`absolute w-3 h-3 rounded-full bg-[#0b0c0e] border border-amber-400/90 hover:scale-125 transition cursor-crosshair z-30 ${PORT_POSITION[anchor]}`}
-              title={PORT_TITLE[anchor]}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartConnect(node.id, anchor);
-              }}
-            />
-          ))}
-        </>
-      )}
-
-      {(node.type === "checklist" || node.type === "table") && (
-        <StructuredNodeContent node={node} onUpdateData={onUpdateData} surfaceStyle={nodeSurface(node)} textStyle={nodeTypography(node)} />
-      )}
-
-      {/* Node Renderers */}
-      {(node.type === "rectangle" || node.type === "ellipse") && (
-        <RectangleContent
-          node={node}
-          isEditing={isEditing}
-          onStopEditing={() => {
-            setIsEditing(false);
-          }}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "sticker" && (
-        <StickerContent
-          node={node}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "card" && (
-        <CardContent
-          node={node}
-          t={t}
-          onCycleStatus={handleCycleStatus}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "diamond" && (
-        <DiamondContent
-          node={node}
-          isEditing={isEditing}
-          onStopEditing={() => {
-            setIsEditing(false);
-          }}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "capsule" && (
-        <CapsuleContent
-          node={node}
-          isEditing={isEditing}
-          onStopEditing={() => {
-            setIsEditing(false);
-          }}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "cylinder" && (
-        <CylinderContent
-          node={node}
-          isEditing={isEditing}
-          onStopEditing={() => {
-            setIsEditing(false);
-          }}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "text" && (
-        <TextContent
-          node={node}
-          isEditing={isEditing}
-          onStopEditing={() => {
-            setIsEditing(false);
-          }}
-          onUpdateData={onUpdateData}
-        />
-      )}
-
-      {node.type === "image" && (
-        <ImageContent
-          node={node}
-          adapter={adapter}
-        />
-      )}
-    </div>
-  );
-}
-
-function RectangleContent({
-  node,
-  isEditing,
-  onStopEditing,
-  onUpdateData,
-}: {
-  node: RectangleNode | EllipseNode;
-  isEditing: boolean;
-  onStopEditing: () => void;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  const cornerRadius =
-    typeof node.style.cornerRadius === "number" ? node.style.cornerRadius : 6;
-
-  return (
-    <div
-      data-testid="node-surface"
-      style={{
-        backgroundColor: node.style.fillColor ?? "#0f141c",
-        borderColor: node.style.strokeColor ?? "#27272a",
-        borderWidth: node.style.strokeDash === "none" ? 0 : (node.style.strokeWidth ?? 1),
-        borderRadius: node.type === "ellipse" ? "50%" : cornerRadius,
-        borderStyle: node.style.strokeDash === "dashed" ? "dashed" : node.style.strokeDash === "dotted" ? "dotted" : "solid",
-        color: node.style.textColor ?? "#f4f4f5",
-        ...nodeTypography(node),
-      }}
-      className="w-full h-full flex items-center justify-center p-3 text-center transition-colors shadow-sm"
-    >
-      {isEditing ? (
-        <input
-          type="text"
-          autoFocus
-          defaultValue={node.data?.label ?? ""}
-          onBlur={(e) => {
-            onUpdateData(node.id, { label: e.target.value });
-            onStopEditing();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onUpdateData(node.id, { label: e.currentTarget.value });
-              onStopEditing();
-            }
-          }}
-          className="w-full bg-transparent text-center font-medium outline-none border-b border-amber-400/80 text-white"
-          style={nodeTypography(node)}
-        />
-      ) : (
-        <span
-          className="font-medium select-none whitespace-pre-line leading-relaxed"
-          style={nodeTypography(node)}
-        >
-          {node.data?.label ?? "Process"}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function StickerContent({
-  node,
-  onUpdateData,
-}: {
-  node: StickerNode;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  return (
-    <div
-      style={{
-        backgroundColor: node.style.fillColor ?? "#fef9c3",
-        color: node.style.textColor ?? "#422006",
-        ...nodeSurface(node),
-        ...nodeTypography(node),
-      }}
-      className="w-full h-full p-3.5 shadow-sm border border-black/10 flex flex-col justify-between relative group"
-    >
-      <textarea
-        value={node.data.content}
-        onChange={(e) => {
-          onUpdateData(node.id, { content: e.target.value });
-        }}
-        placeholder="Type a note..."
-        className="w-full h-full bg-transparent resize-none outline-none font-sans leading-relaxed"
-        style={nodeTypography(node)}
-      />
-    </div>
-  );
-}
-
-function CardContent({
-  node,
-  t,
-  onCycleStatus,
-  onUpdateData,
-}: {
-  node: CardNode;
-  t: (key: string) => string;
-  onCycleStatus: (e: React.MouseEvent, status?: CardStatus) => void;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  const status = node.data.status ?? "todo";
-
-  const defaultStatusConfig = {
-    label: t("statuses.todo"),
-    bg: "bg-neutral-800 border-neutral-700 text-neutral-300",
-    icon: Circle,
-  };
-
-  const statusConfigs: Record<string, { label: string; bg: string; icon: typeof Circle }> = {
-    todo: defaultStatusConfig,
-    in_progress: {
-      label: t("statuses.in_progress"),
-      bg: "bg-amber-500/10 border-amber-500/30 text-amber-400",
-      icon: Clock,
-    },
-    done: {
-      label: t("statuses.done"),
-      bg: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
-      icon: CheckCircle2,
-    },
-    blocked: {
-      label: t("statuses.blocked"),
-      bg: "bg-rose-500/10 border-rose-500/30 text-rose-400",
-      icon: Flame,
-    },
-  };
-
-  const statusConfig = statusConfigs[status] ?? defaultStatusConfig;
-  const StatusIcon = statusConfig.icon;
-
-  return (
-    <div style={{ ...nodeSurface(node), ...nodeTypography(node) }} className="w-full h-full p-3 flex flex-col justify-between">
-      <div>
-        <div className="flex items-start justify-between gap-2 mb-1.5">
-          <input
-            type="text"
-            value={node.data.title}
-            onChange={(e) => {
-              onUpdateData(node.id, { title: e.target.value });
+      {isSelected &&
+        onStartConnect &&
+        (["n", "s", "w", "e"] as const).map((anchor) => (
+          <button
+            key={anchor}
+            type="button"
+            className={`absolute w-3 h-3 rounded-full bg-[#161819] border border-[#e9dda7] cursor-crosshair z-30 ${PORT_POSITION[anchor]}`}
+            title={`Connect ${anchor.toUpperCase()}`}
+            onPointerDown={(event) => {
+              event.stopPropagation();
             }}
-            placeholder="Card title..."
-            className="w-full bg-transparent font-medium text-neutral-200 outline-none hover:bg-white/[0.04] focus:bg-white/[0.08] px-1 py-0.5 rounded transition"
-            style={nodeTypography(node)}
+            onClick={() => {
+              onStartConnect(node.id, anchor);
+            }}
           />
-
+        ))}
+      {(typeof node.note === "string" || node.type === "markdown") && (
+        <button
+          type="button"
+          className={`node-note-trigger ${node.type === "markdown" ? "node-note-main" : ""}`}
+          aria-label={t("note.open")}
+          title={t("note.open")}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={() => {
+            setNoteOpen(true);
+          }}
+        >
+          <FileText size={node.type === "markdown" ? 24 : 13} />
+        </button>
+      )}
+      {isShape && (
+        <div
+          data-testid="node-surface"
+          className="node-shape"
+          style={{
+            ...typography,
+            ...(node.type === "diamond" || node.type === "cylinder"
+              ? {}
+              : surface),
+            borderRadius:
+              node.type === "capsule"
+                ? 9999
+                : node.type === "ellipse"
+                  ? "50%"
+                  : surface.borderRadius,
+          }}
+        >
+          {(node.type === "diamond" || node.type === "cylinder") && (
+            <svg
+              className="node-vector"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              {node.type === "diamond" ? (
+                <polygon points="50,2 98,50 50,98 2,50" {...svgStyle} />
+              ) : (
+                <>
+                  <path
+                    d="M 2 20 L 2 80 A 48 18 0 0 0 98 80 L 98 20 Z"
+                    {...svgStyle}
+                  />
+                  <ellipse cx="50" cy="20" rx="48" ry="18" {...svgStyle} />
+                </>
+              )}
+            </svg>
+          )}
+          <div
+            className="node-shape-label"
+            style={{ paddingTop: node.type === "cylinder" ? 16 : 0 }}
+          >
+            {rich(
+              "label",
+              node.data?.label ?? "",
+              t("richText.label"),
+              isEditing,
+              false,
+            )}
+          </div>
+        </div>
+      )}
+      {node.type === "sticker" && (
+        <div className="node-sticker" style={{ ...surface, ...typography }}>
+          {rich("content", node.data.content, t("tools.sticker"))}
+        </div>
+      )}
+      {node.type === "text" && (
+        <div className="node-text" style={{ ...surface, ...typography }}>
+          {rich("text", node.data.text, t("tools.text"), isEditing)}
+        </div>
+      )}
+      {node.type === "card" && (
+        <div className="node-card" style={{ ...surface, ...typography }}>
+          <div className="node-card-title">
+            {rich(
+              "title",
+              node.data.title,
+              t("richText.cardTitle"),
+              true,
+              false,
+            )}
+          </div>
           <button
             type="button"
-            onClick={(e) => {
-              onCycleStatus(e, node.data.status);
+            className="card-status"
+            onClick={() => {
+              const status =
+                CARD_STATUS[
+                  (CARD_STATUS.indexOf(node.data.status ?? "todo") + 1) %
+                    CARD_STATUS.length
+                ] ?? "todo";
+              onUpdateData(node.id, { status });
             }}
-            className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono border transition cursor-pointer shrink-0 ${statusConfig.bg}`}
-            title="Click to toggle status"
           >
-            <StatusIcon className="w-2.5 h-2.5" />
-            <span>{statusConfig.label}</span>
+            {node.data.status === "done" ? (
+              <CheckCircle2 size={13} />
+            ) : node.data.status === "in_progress" ? (
+              <Clock size={13} />
+            ) : node.data.status === "blocked" ? (
+              <Flame size={13} />
+            ) : (
+              <Circle size={13} />
+            )}
+            {t(`statuses.${node.data.status ?? "todo"}`)}
           </button>
-        </div>
-
-        <textarea
-          value={node.data.description ?? ""}
-          onChange={(e) => {
-            onUpdateData(node.id, { description: e.target.value });
-          }}
-          placeholder="Add description..."
-          style={nodeTypography(node)}
-          rows={3}
-          className="w-full bg-transparent text-[11px] text-neutral-400 resize-none outline-none hover:bg-white/[0.03] focus:bg-white/[0.06] p-1 rounded transition leading-relaxed"
-        />
-      </div>
-
-      {node.data.tags && node.data.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5 pt-1.5 border-t border-neutral-800/80">
-          {node.data.tags.map((tag) => (
-            <span
-              key={tag.id}
-              style={{ color: tag.color }}
-              className="px-1.5 py-0.2 rounded bg-neutral-800 text-[9px] font-mono border border-neutral-700/60"
-            >
-              {tag.label}
-            </span>
-          ))}
+          {rich(
+            "description",
+            node.data.description ?? "",
+            t("richText.description"),
+          )}
         </div>
       )}
-    </div>
-  );
-}
-
-function DiamondContent({
-  node,
-  isEditing,
-  onStopEditing,
-  onUpdateData,
-}: {
-  node: DiamondNode;
-  isEditing: boolean;
-  onStopEditing: () => void;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  const fillColor = node.style.fillColor ?? "#0f172a";
-  const strokeColor = node.style.strokeColor ?? "#38bdf8";
-  const strokeWidth = node.style.strokeWidth ?? 1.5;
-
-  return (
-    <div className="w-full h-full relative flex items-center justify-center">
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <polygon
-          points="50,2 98,50 50,98 2,50"
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={node.style.strokeDash === "none" ? 0 : strokeWidth}
-          strokeDasharray={node.style.strokeDash === "dashed" ? "8 5" : node.style.strokeDash === "dotted" ? "2 4" : undefined}
-          vectorEffect="non-scaling-stroke"
+      {(node.type === "table" || node.type === "checklist") && (
+        <StructuredNodeContent
+          node={node}
+          onUpdateData={onUpdateData}
+          onUpdateRuns={onUpdateRuns}
+          surfaceStyle={surface}
+          textStyle={typography}
         />
-      </svg>
-      <div className="relative z-10 px-4 text-center w-full">
-        {isEditing ? (
-          <input
-            autoFocus
-            style={nodeTypography(node)}
-            type="text"
-            defaultValue={node.data?.label ?? "Decision"}
-            onBlur={(e) => {
-              onUpdateData(node.id, { label: e.target.value });
-              onStopEditing();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onUpdateData(node.id, { label: e.currentTarget.value });
-                onStopEditing();
-              }
-            }}
-            className="w-full bg-transparent text-center font-medium text-[13px] outline-none border-b border-amber-400/80 text-white"
-          />
-        ) : (
-          <span
-            className="block font-medium text-[13px] select-none text-neutral-100 whitespace-pre-line leading-relaxed"
-            style={nodeTypography(node)}
-          >
-            {node.data?.label ?? "Decision"}
+      )}
+      {node.type === "markdown" && (
+        <div className="markdown-node" style={{ ...surface, ...typography }}>
+          <strong>{node.data.title || t("note.untitled")}</strong>
+          <span>
+            {(node.note ?? "").replace(/[#*`]/g, "").slice(0, 90) ||
+              t("note.nodeHint")}
           </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CapsuleContent({
-  node,
-  isEditing,
-  onStopEditing,
-  onUpdateData,
-}: {
-  node: CapsuleNode;
-  isEditing: boolean;
-  onStopEditing: () => void;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  const fillColor = node.style.fillColor ?? "#062b1e";
-  const strokeColor = node.style.strokeColor ?? "#10b981";
-  const strokeWidth = node.style.strokeWidth ?? 1.5;
-
-  return (
-    <div
-      style={{
-        backgroundColor: fillColor,
-        borderColor: strokeColor,
-        borderWidth: node.style.strokeDash === "none" ? 0 : strokeWidth,
-        borderStyle: node.style.strokeDash === "dashed" ? "dashed" : node.style.strokeDash === "dotted" ? "dotted" : "solid",
-        ...nodeTypography(node),
-      }}
-      className="w-full h-full rounded-full flex items-center justify-center p-3 text-center border shadow-sm transition-colors"
-    >
-      {isEditing ? (
-        <input
-          autoFocus
-          style={nodeTypography(node)}
-          type="text"
-          defaultValue={node.data?.label ?? "Start / End"}
-          onBlur={(e) => {
-            onUpdateData(node.id, { label: e.target.value });
-            onStopEditing();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onUpdateData(node.id, { label: e.currentTarget.value });
-              onStopEditing();
-            }
-          }}
-          className="w-full bg-transparent text-center font-medium text-[13px] outline-none border-b border-amber-400/80 text-white"
-        />
-      ) : (
-        <span
-          className="block font-medium text-[13px] select-none text-neutral-100 whitespace-pre-line leading-relaxed"
-          style={nodeTypography(node)}
-        >
-          {node.data?.label ?? "Start / End"}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function CylinderContent({
-  node,
-  isEditing,
-  onStopEditing,
-  onUpdateData,
-}: {
-  node: CylinderNode;
-  isEditing: boolean;
-  onStopEditing: () => void;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  const fillColor = node.style.fillColor ?? "#181126";
-  const strokeColor = node.style.strokeColor ?? "#a855f7";
-  const strokeWidth = node.style.strokeWidth ?? 1.5;
-
-  return (
-    <div className="w-full h-full relative flex items-center justify-center">
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {/* Lower body */}
-        <path
-          d="M 2 20 L 2 80 A 48 18 0 0 0 98 80 L 98 20 Z"
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={node.style.strokeDash === "none" ? 0 : strokeWidth}
-          strokeDasharray={node.style.strokeDash === "dashed" ? "8 5" : node.style.strokeDash === "dotted" ? "2 4" : undefined}
-          vectorEffect="non-scaling-stroke"
-        />
-        {/* Top ellipse */}
-        <ellipse
-          cx="50"
-          cy="20"
-          rx="48"
-          ry="18"
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={node.style.strokeDash === "none" ? 0 : strokeWidth}
-          strokeDasharray={node.style.strokeDash === "dashed" ? "8 5" : node.style.strokeDash === "dotted" ? "2 4" : undefined}
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <div className="relative z-10 px-3 pt-4 text-center w-full">
-        {isEditing ? (
-          <input
-            autoFocus
-            style={nodeTypography(node)}
-            type="text"
-            defaultValue={node.data?.label ?? "Data"}
-            onBlur={(e) => {
-              onUpdateData(node.id, { label: e.target.value });
-              onStopEditing();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onUpdateData(node.id, { label: e.currentTarget.value });
-                onStopEditing();
-              }
-            }}
-            className="w-full bg-transparent text-center font-medium text-[13px] outline-none border-b border-amber-400/80 text-white"
-          />
-        ) : (
-          <span
-            className="block font-medium text-[13px] select-none text-neutral-100 whitespace-pre-line leading-relaxed"
-            style={nodeTypography(node)}
-          >
-            {node.data?.label ?? "Data"}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TextContent({
-  node,
-  isEditing,
-  onStopEditing,
-  onUpdateData,
-}: {
-  node: TextNode;
-  isEditing: boolean;
-  onStopEditing: () => void;
-  onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
-}) {
-  return (
-    <div style={{ ...nodeSurface(node), ...nodeTypography(node) }} className="w-full h-full flex items-center p-2">
-      {isEditing ? (
-        <textarea
-          autoFocus
-          style={nodeTypography(node)}
-          defaultValue={node.data.text}
-          onBlur={(e) => {
-            onUpdateData(node.id, { text: e.target.value });
-            onStopEditing();
-          }}
-          className="w-full h-full bg-transparent font-medium text-neutral-100 outline-none resize-none font-sans"
-        />
-      ) : (
-        <div
-          className="font-medium text-neutral-100 whitespace-pre-wrap select-none leading-relaxed"
-          style={nodeTypography(node)}
-        >
-          {node.data.text || "Text"}
         </div>
       )}
-    </div>
-  );
-}
-
-function ImageContent({
-  node,
-  adapter,
-}: {
-  node: ImageNode;
-  adapter?: StorageAdapter | null | undefined;
-}) {
-  const [url, setUrl] = useState<string | null>(() => getCachedAssetUrl(node.data.assetId) ?? null);
-
-  useEffect(() => {
-    if (!url) {
-      let isMounted = true;
-      void resolveAssetUrl(node.data.assetId, adapter).then((resolved) => {
-        if (isMounted && resolved) {
-          setUrl(resolved);
-        }
-      });
-      return () => {
-        isMounted = false;
-      };
-    }
-  }, [node.data.assetId, adapter, url]);
-
-  const cornerRadius = typeof node.style.cornerRadius === "number" ? node.style.cornerRadius : 6;
-
-  return (
-    <div
-      className="w-full h-full overflow-hidden flex items-center justify-center bg-neutral-900/60 select-none shadow-md border border-white/10"
-      style={{ ...nodeSurface(node), borderRadius: cornerRadius }}
-    >
-      {url ? (
-        <img
-          src={url}
-          alt={node.data.altText ?? "Canvas image"}
-          className="w-full h-full object-contain pointer-events-none select-none"
-          style={{ ...nodeSurface(node), borderRadius: cornerRadius }}
-          draggable={false}
-        />
-      ) : (
-        <div className="w-4 h-4 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
+      {node.type === "image" && (
+        <div className="node-image" style={surface}>
+          <AssetImage
+            assetId={node.data.assetId}
+            alt={node.data.altText ?? t("tools.image")}
+            adapter={adapter}
+          />
+        </div>
+      )}
+      {noteOpen && (
+        <Suspense fallback={null}><NoteEditor
+          node={node}
+          adapter={adapter}
+          onChange={(markdown) => {
+            onUpdateNote(node.id, markdown);
+            if (node.type === "markdown")
+              onUpdateData(node.id, {
+                title: /^#\s+(.+)$/m.exec(markdown)?.[1] ?? "",
+              });
+          }}
+          onClose={closeNote}
+        /></Suspense>
       )}
     </div>
   );
-}
-
-function nodeTypography(node: CanvasNode): CSSProperties {
-  return {
-    color: node.style.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"),
-    fontSize: node.style.fontSize ?? 14,
-    fontWeight: node.style.fontWeight ?? 400,
-    fontFamily: node.style.fontFamily,
-    textAlign: node.style.textAlign ?? (node.type === "rectangle" || node.type === "ellipse" || node.type === "diamond" || node.type === "capsule" || node.type === "cylinder" ? "center" : "left"),
-    width: "100%",
-  };
-}
-
-function nodeSurface(node: CanvasNode): CSSProperties {
-  return {
-    backgroundColor: node.style.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"),
-    borderColor: node.style.strokeColor ?? "#727777",
-    borderWidth: node.style.strokeDash === "none" ? 0 : (node.style.strokeWidth ?? 1),
-    borderStyle: node.style.strokeDash === "dashed" ? "dashed" : node.style.strokeDash === "dotted" ? "dotted" : "solid",
-    borderRadius: typeof node.style.cornerRadius === "number" ? node.style.cornerRadius : 6,
-  };
 }

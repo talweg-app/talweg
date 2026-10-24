@@ -3,6 +3,8 @@ import { Plus, Trash2 } from "lucide-react";
 import type { CanvasPage, DocumentId, PageId } from "@talweg/core";
 import { navigate } from "../routes/router.js";
 
+import { useTranslation } from "../hooks/useTranslation.js";
+
 interface PageTabsBarProps {
   pages: readonly CanvasPage[];
   activePageId: PageId;
@@ -29,6 +31,7 @@ export function PageTabsBar({
   onRenamePage,
   onDeletePage,
 }: PageTabsBarProps) {
+  const { t } = useTranslation();
   const [editingPageId, setEditingPageId] = useState<PageId | null>(null);
   const [editingName, setEditingName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,7 +71,7 @@ export function PageTabsBar({
         // canvas pointer capture retargets the click away from the tab
         e.stopPropagation();
       }}
-      className="absolute bottom-4 left-4 z-30 flex items-center bg-[#131518] border border-white/[0.08] rounded shadow-md select-none"
+      className="canvas-pages-panel absolute bottom-4 left-4 z-30 flex items-center bg-[#131518] border border-white/[0.08] rounded shadow-md select-none"
     >
       <div className="flex items-center max-w-[380px] overflow-x-auto no-scrollbar">
         {pages.map((page, index) => {
@@ -78,13 +81,14 @@ export function PageTabsBar({
           return (
             <div
               key={page.id}
-              className={`group relative flex items-center gap-1 h-8 px-3 text-xs transition cursor-pointer ${
+              className={`canvas-page-tab group relative flex items-center gap-1 h-8 px-3 text-xs transition cursor-pointer ${
                 index > 0 ? "border-l border-white/[0.06]" : ""
               } ${
                 isActive
                   ? "text-neutral-100 bg-white/[0.05]"
                   : "text-neutral-500 hover:text-neutral-200 hover:bg-white/[0.03]"
               }`}
+              data-active={isActive}
               onClick={() => {
                 handleTabClick(page.id);
               }}
@@ -122,8 +126,8 @@ export function PageTabsBar({
               {pages.length > 1 && !isEditing && (
                 <button
                   type="button"
-                  title="Удалить страницу"
-                  aria-label="Удалить страницу"
+                  title={t("pages.delete")}
+                  aria-label={t("pages.delete")}
                   className="opacity-0 group-hover:opacity-100 text-neutral-600 hover:text-rose-300 transition cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -140,8 +144,8 @@ export function PageTabsBar({
 
       <button
         type="button"
-        title="Добавить страницу"
-        aria-label="Добавить страницу"
+        title={t("pages.add")}
+        aria-label={t("pages.add")}
         onClick={() => {
           const newId = onAddPage();
           if (newId) {

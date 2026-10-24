@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import * as Y from "yjs";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock,
   FolderOpen,
@@ -6,10 +7,15 @@ import {
   Layout,
   Boxes,
   X,
+  ArrowUpRight,
+  Plus,
+  Layers,
 } from "lucide-react";
 import type { CanvasDocument, DocumentId } from "@talweg/core";
 import {
   IndexedDBStorageAdapter,
+  createSceneDoc,
+  yDocToDocument,
   type StorageSnapshot,
 } from "@talweg/storage";
 import { useTranslation } from "../hooks/useTranslation.js";
@@ -23,6 +29,9 @@ import {
   createSprintMindmapTemplate,
 } from "../utils/starterTemplates.js";
 
+import { hiddenBoardIds, setBoardHidden, templateDraftIds } from "../utils/boardLibrary.js";
+import { LanguagePicker } from "./LanguagePicker.js";
+
 interface WelcomeDashboardProps {
   isOpen?: boolean;
   isStandalone?: boolean;
@@ -33,19 +42,13 @@ interface WelcomeDashboardProps {
   onImportSuccess: (doc: CanvasDocument) => void;
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const diffSec = Math.floor((Date.now() - timestamp) / 1000);
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${String(diffMin)}m ago`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${String(diffHour)}h ago`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${String(diffDay)}d ago`;
-  return new Date(timestamp).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+function formatRelativeTime(timestamp: number, relative: Intl.RelativeTimeFormat, language: string): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return relative.format(0, "second");
+  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), "minute");
+  if (seconds < 86400) return relative.format(-Math.floor(seconds / 3600), "hour");
+  if (seconds < 604800) return relative.format(-Math.floor(seconds / 86400), "day");
+  return new Date(timestamp).toLocaleDateString(language, { month: "short", day: "numeric" });
 }
 
 export function WelcomeDashboard({
@@ -57,8 +60,12 @@ export function WelcomeDashboard({
   onCreateFromTemplate,
   onImportSuccess,
 }: WelcomeDashboardProps) {
-  const { t } = useTranslation();
-  const [recentBoards, setRecentBoards] = useState<StorageSnapshot[]>([]);
+  const { t, language } = useTranslation();
+  const relativeTime = useMemo(() => new Intl.RelativeTimeFormat(language, { numeric: "auto" }), [language]);
+  const [recentBoards, setRecentBoards] = useState<StorageSnapshot["meta"][]>([]);
+  const [hiddenBoards, setHiddenBoards] = useState(hiddenBoardIds);
+  const [showHidden, setShowHidden] = useState(false);
+  const [boardQuery, setBoardQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -73,9 +80,23 @@ export function WelcomeDashboard({
       try {
         await adapter.initialize();
         const snapshots = await adapter.listSnapshots();
-        if (isMounted) {
-          snapshots.sort((a, b) => b.meta.updatedAt - a.meta.updatedAt);
-          setRecentBoards(snapshots);
+        {
+          const drafts = templateDraftIds();
+          const candidates = snapshots.filter((snapshot) => !drafts.has(snapshot.meta.documentId));
+          const summaries = await Promise.allSettled(candidates.map(async (snapshot) => {
+            const deltas = await adapter.loadDeltas(snapshot.meta.documentId, snapshot.clock);
+            if (!deltas.length) return snapshot.meta;
+            const scene = createSceneDoc();
+            try {
+              Y.applyUpdate(scene, snapshot.documentBlob);
+              for (const delta of deltas) Y.applyUpdate(scene, delta.updateBlob);
+              const current = yDocToDocument(scene);
+              return { ...snapshot.meta, name: current.name, nodeCount: Object.keys(current.nodes).length, updatedAt: Math.max(snapshot.meta.updatedAt, ...deltas.map((delta) => delta.timestamp)) };
+            } finally { scene.destroy(); }
+          }));
+          const boards = summaries.flatMap((summary, index) => summary.status === "fulfilled" ? [summary.value] : candidates[index] ? [candidates[index].meta] : []);
+          boards.sort((a, b) => b.updatedAt - a.updatedAt);
+          if (isMounted) setRecentBoards(boards);
         }
       } catch {
         // Fallback silently if storage unavailable
@@ -91,10 +112,7 @@ export function WelcomeDashboard({
       if (!isStandalone && closeButtonRef.current) {
         closeButtonRef.current.focus();
       } else {
-        const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        );
-        firstFocusable?.focus();
+        dialogRef.current?.focus();
       }
     }, 0);
 
@@ -180,135 +198,131 @@ export function WelcomeDashboard({
     },
   ];
 
+  const libraryBoards = recentBoards.filter((board) => showHidden ? hiddenBoards.has(board.documentId) : !hiddenBoards.has(board.documentId));
+  const visibleBoards = libraryBoards.filter((board) => board.name.toLocaleLowerCase().includes(boardQuery.toLocaleLowerCase()));
   return (
     <div
       ref={dialogRef}
+      tabIndex={-1}
       role={isStandalone ? "region" : "dialog"}
       aria-modal={isStandalone ? undefined : "true"}
       aria-labelledby="welcome-dashboard-title"
-      className={
-        isStandalone
-          ? "min-h-screen w-full bg-[#0b0c0e] flex flex-col overflow-y-auto antialiased select-none text-neutral-200"
-          : "fixed inset-0 z-50 bg-[#0b0c0e] flex flex-col overflow-y-auto antialiased select-none text-neutral-200"
-      }
+      className={`workspace-home ${isStandalone ? "" : "workspace-home-overlay"}`}
     >
-      <div className="h-10 border-b border-white/[0.08] bg-[#0e0f11] px-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="" className="w-4 h-4" />
-          <h1 id="welcome-dashboard-title" className="text-sm font-medium tracking-tight text-neutral-200">
-            {t("dashboard.title")}
-          </h1>
+      <header className="workspace-header">
+        <div className="workspace-brand">
+          <img src="/favicon.svg" alt="" width="26" height="26" />
+          <span>Talweg</span>
+          <span className="workspace-header-divider" />
+          <span className="workspace-header-caption">{t("dashboard.workspace")}</span>
         </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              void handleOpenFromFile();
-            }}
-            className="flex items-center gap-1.5 h-8 px-2.5 rounded text-xs text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
+        <div className="workspace-header-actions">
+          <LanguagePicker />
+          <button type="button" onClick={() => { void handleOpenFromFile(); }} className="workspace-open-file">
+            <FolderOpen size={15} />
             <span>{t("dashboard.openFromComputer")}</span>
           </button>
-
           {!isStandalone && onClose && (
-            <button
-              ref={closeButtonRef}
-              type="button"
-              onClick={onClose}
-              className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-white hover:bg-white/[0.05] transition cursor-pointer"
-              title={t("dashboard.close")}
-              aria-label={t("dashboard.close")}
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <button ref={closeButtonRef} type="button" onClick={onClose} className="workspace-close" title={t("dashboard.close")} aria-label={t("dashboard.close")}><X size={17} /></button>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-3xl w-full mx-auto flex flex-col px-8 py-12 gap-12">
-        <div>
-          <h2 className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2">
-            {t("dashboard.templates")}
-          </h2>
-          <div className="border border-white/[0.08] rounded">
-            {templates.map((template, index) => {
+      <main className="workspace-content">
+        <section className="workspace-intro">
+          <div className="workspace-eyebrow"><span />{t("dashboard.eyebrow")}</div>
+          <h1 id="welcome-dashboard-title">{t("dashboard.heroTitle")}</h1>
+          <p>{t("dashboard.heroDescription")}</p>
+        </section>
+
+        <section aria-labelledby="templates-title">
+          <div className="workspace-section-heading">
+            <h2 id="templates-title">{t("dashboard.templates")}</h2>
+            <span>{t("dashboard.chooseStartingPoint")}</span>
+          </div>
+          <div className="workspace-templates">
+            {templates.map((template) => {
               const Icon = template.icon;
               return (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={template.create}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left group transition cursor-pointer hover:bg-white/[0.03] ${
-                    index > 0 ? "border-t border-white/[0.06]" : ""
-                  }`}
-                >
-                  <Icon className="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 transition shrink-0" />
-                  <span className="flex flex-col min-w-0 flex-1">
-                    <span className="text-[13px] text-neutral-200 group-hover:text-white transition truncate">
-                      {template.title}
-                    </span>
-                    <span className="text-xs text-neutral-500 truncate">
-                      {template.desc}
-                    </span>
+                <button key={template.id} type="button" onClick={template.create} className={`workspace-template workspace-template-${template.id}`}>
+                  <TemplatePreview variant={template.id} />
+                  <span className="workspace-template-body">
+                    <span className="workspace-template-title">{template.title}<ArrowUpRight size={17} /></span>
+                    <span className="workspace-template-description">{template.desc}</span>
+                    <span className="workspace-template-mode"><Icon size={12} />{template.mode}</span>
                   </span>
-                  <span className="text-[11px] text-neutral-600 shrink-0">{template.mode}</span>
                 </button>
               );
             })}
           </div>
-        </div>
+        </section>
 
-        <div>
-          <h2 className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2">
-            {t("dashboard.recentBoards")}
-          </h2>
-
+        <section className="workspace-recents" aria-labelledby="recent-boards-title">
+          <div className="workspace-section-heading">
+            <h2 id="recent-boards-title">{t("dashboard.recentBoards")}<span className="workspace-count">{libraryBoards.length}</span></h2>
+            <span>{t("dashboard.onlyOnDevice")}</span>
+          </div>
+          <div className="workspace-library-options">
+            <input type="search" aria-label={t("dashboard.searchBoards")} placeholder={t("dashboard.searchBoards")} value={boardQuery} onChange={(event) => { setBoardQuery(event.target.value); }} />
+            <button type="button" onClick={() => { setShowHidden(!showHidden); }}>{t(showHidden ? "dashboard.showBoards" : "dashboard.showHidden")} {showHidden ? "" : `(${String(hiddenBoards.size)})`}</button>
+          </div>
           {isLoading ? (
-            <div className="h-16 flex items-center justify-center text-xs text-neutral-500 border border-dashed border-white/[0.08] rounded">
-              …
-            </div>
-          ) : recentBoards.length === 0 ? (
-            <div className="border border-dashed border-white/[0.08] rounded px-3 py-8 text-center text-xs text-neutral-500">
-              {t("dashboard.noRecent")}
-            </div>
+            <div className="workspace-empty" role="status">{t("dashboard.loading")}</div>
+          ) : visibleBoards.length === 0 ? (
+            <div className="workspace-empty"><Layers size={22} /><p>{t(boardQuery ? "dashboard.noMatches" : showHidden ? "dashboard.noHidden" : "dashboard.noRecent")}</p></div>
           ) : (
-            <div className="border border-white/[0.08] rounded">
-              {recentBoards.map((snapshot, index) => {
-                const isCurrent = snapshot.meta.documentId === currentDocumentId;
+            <div className="workspace-board-list">
+              {visibleBoards.map((snapshot) => {
+                const isCurrent = snapshot.documentId === currentDocumentId;
                 return (
-                  <button
-                    key={snapshot.meta.documentId}
-                    type="button"
-                    onClick={() => {
-                      onSelectBoard(snapshot.meta.documentId);
-                    }}
-                    className={`w-full flex items-center gap-3.5 px-4 py-3 text-left group transition cursor-pointer hover:bg-white/[0.03] ${
-                      index > 0 ? "border-t border-white/[0.06]" : ""
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? "bg-amber-400" : "bg-transparent"}`} />
-                    <span className="text-[13px] text-neutral-200 group-hover:text-white transition truncate flex-1">
-                      {snapshot.meta.name || "Untitled"}
-                      {isCurrent && <span className="text-[10px] text-neutral-500 ml-2">{t("dashboard.active")}</span>}
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] text-neutral-600 shrink-0">
-                      <Clock className="w-3 h-3" />
-                      {formatRelativeTime(snapshot.meta.updatedAt)}
-                    </span>
-                    <span className="text-[10px] text-neutral-600 shrink-0 w-14 text-right font-mono">
-                      {String(snapshot.meta.nodeCount)}
-                    </span>
+                  <div className="workspace-board-row" key={snapshot.documentId}><button style={{ contentVisibility: "auto", containIntrinsicSize: "auto 68px" }} type="button" onClick={() => { onSelectBoard(snapshot.documentId); }} className="workspace-board">
+                    <span className="workspace-board-icon"><Layout size={17} /></span>
+                    <span className="workspace-board-title">{snapshot.name || t("canvas.titlePlaceholder")}{isCurrent && <span className="workspace-current">{t("dashboard.active")}</span>}</span>
+                    <span className="workspace-board-count">{String(snapshot.nodeCount)} {t("dashboard.elements")}</span>
+                    <span className="workspace-board-time"><Clock size={12} />{formatRelativeTime(snapshot.updatedAt, relativeTime, language)}</span>
+                    <ArrowUpRight size={16} className="workspace-board-arrow" />
                   </button>
+                  <button className="workspace-board-hide" type="button" aria-label={`${t(showHidden ? "dashboard.restoreBoard" : "dashboard.hideBoard")} ${snapshot.name}`} title={t(showHidden ? "dashboard.restoreBoard" : "dashboard.hideBoard")} onClick={() => { setHiddenBoards(setBoardHidden(snapshot.documentId, !showHidden)); }}><X size={14} /></button></div>
                 );
               })}
             </div>
           )}
-        </div>
-
-        <p className="text-xs text-neutral-600">{t("dashboard.subtitle")}</p>
-      </div>
+        </section>
+        <footer className="workspace-footer"><span className="workspace-local-dot" />{t("dashboard.subtitle")}</footer>
+      </main>
     </div>
+  );
+}
+
+function TemplatePreview({ variant }: { variant: string }) {
+  return (
+    <span className={`template-preview template-preview-${variant}`} aria-hidden="true">
+      {variant === "blank" ? (
+        <span className="template-blank-mark"><Plus size={22} strokeWidth={1.25} /></span>
+      ) : (
+        <svg viewBox="0 0 280 112" fill="none">
+          {variant === "micro" ? (
+            <>
+              <path d="M72 57H107Q113 57 113 51V31Q113 25 119 25H150M113 51V83Q113 89 119 89H150M206 25H226Q232 25 232 31V83Q232 89 226 89H206" />
+              <rect x="20" y="42" width="52" height="30" rx="5" />
+              <rect x="150" y="10" width="56" height="30" rx="5" />
+              <rect x="150" y="74" width="56" height="30" rx="5" />
+              <path d="M33 54H59M33 61H49M164 22H191M164 29H182M164 86H191M164 93H182" className="preview-text-lines" />
+              <circle cx="232" cy="57" r="4" className="preview-port" />
+            </>
+          ) : (
+            <>
+              <path d="M125 56C151 56 149 23 175 23M125 56C151 56 149 89 175 89M72 56C44 56 53 23 28 23M72 56C44 56 53 89 28 89" />
+              <rect x="72" y="40" width="53" height="32" rx="6" className="preview-root" />
+              <rect x="175" y="11" width="68" height="24" rx="4" />
+              <rect x="175" y="77" width="68" height="24" rx="4" />
+              <path d="M87 53H111M87 60H102M188 23H229M188 89H217M9 23H28M9 89H28" className="preview-text-lines" />
+              <circle cx="28" cy="23" r="3" className="preview-port" />
+              <circle cx="28" cy="89" r="3" className="preview-port" />
+            </>
+          )}
+        </svg>
+      )}
+    </span>
   );
 }

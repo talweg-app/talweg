@@ -35,6 +35,7 @@ export interface ConnectorGeometry {
   readonly sourcePoint: Point2D;
   readonly targetPoint: Point2D;
   readonly midpoint: Point2D;
+  readonly labelAnchor?: Point2D;
 }
 
 export type PortSlotMap = ReadonlyMap<string, Anchor>;
@@ -75,7 +76,10 @@ function orderOnFace(face: CompassFace, otherNode: CanvasNode): number {
   return face === "e" || face === "w" ? center.y : center.x;
 }
 
-function resolveArrow(arrow: ArrowNode, document: CanvasDocument): ResolvedArrow | null {
+function resolveArrow(
+  arrow: ArrowNode,
+  document: CanvasDocument,
+): ResolvedArrow | null {
   const sourceNode = document.nodes[arrow.data.sourceId];
   const targetNode = document.nodes[arrow.data.targetId];
 
@@ -164,7 +168,71 @@ function bezierPath(
 }
 
 function boxesIntersect(a: BoundingBox, b: BoundingBox): boolean {
-  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+  return (
+    a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
+  );
+}
+
+export function connectorLabelPoint(
+  points: readonly Point2D[],
+  boxes: readonly BoundingBox[],
+  labelWidth: number,
+): Point2D {
+  const segments = points.slice(1).map((point, index) => {
+    const start = points[index] ?? point;
+    return {
+      start,
+      end: point,
+      length: Math.hypot(point.x - start.x, point.y - start.y),
+    };
+  });
+  const length = segments.reduce((total, segment) => total + segment.length, 0);
+  const candidates: { point: Point2D; distance: number }[] = [];
+  let traveled = 0;
+  for (const segment of segments) {
+    for (const fraction of [0.5, 0.25, 0.75]) {
+      const along = traveled + segment.length * fraction;
+      candidates.push({
+        point: {
+          x: segment.start.x + (segment.end.x - segment.start.x) * fraction,
+          y: segment.start.y + (segment.end.y - segment.start.y) * fraction,
+        },
+        distance: Math.abs(along - length / 2),
+      });
+    }
+    if (
+      traveled <= length / 2 &&
+      traveled + segment.length >= length / 2 &&
+      segment.length > 0
+    ) {
+      const fraction = (length / 2 - traveled) / segment.length;
+      candidates.push({
+        point: {
+          x: segment.start.x + (segment.end.x - segment.start.x) * fraction,
+          y: segment.start.y + (segment.end.y - segment.start.y) * fraction,
+        },
+        distance: 0,
+      });
+    }
+    traveled += segment.length;
+  }
+  candidates.sort((a, b) => a.distance - b.distance);
+  const isClear = (point: Point2D) =>
+    !boxes.some(
+      (box) =>
+        point.x + labelWidth / 2 + 8 > box.minX &&
+        point.x - labelWidth / 2 - 8 < box.maxX &&
+        point.y + 14 > box.minY &&
+        point.y - 14 < box.maxY,
+    );
+  const clear = candidates.find(({ point }) => isClear(point));
+  if (clear) return clear.point;
+  const middle = candidates[0]?.point ?? points[0] ?? { x: 0, y: 0 };
+  for (const offset of [-24, 24, -40, 40, -60, 60, -80, 80]) {
+    const point = { x: middle.x, y: middle.y + offset };
+    if (isClear(point)) return point;
+  }
+  return middle;
 }
 
 export function computeConnectorGeometry(
@@ -198,7 +266,12 @@ export function computeConnectorGeometry(
   if (arrow.data.curveStyle === "bezier" || hasDegenerateRoute) {
     return {
       isBezier: true,
-      lineSvgPath: bezierPath(sourcePoint, targetPoint, sourceAnchor, targetAnchor),
+      lineSvgPath: bezierPath(
+        sourcePoint,
+        targetPoint,
+        sourceAnchor,
+        targetAnchor,
+      ),
       startMarkerSvg: undefined,
       endMarkerSvg: undefined,
       sourcePoint,
@@ -211,7 +284,11 @@ export function computeConnectorGeometry(
 
   for (const node of Object.values(document.nodes)) {
     if (node.type === "arrow") continue;
-    if (node.id === resolved.sourceNode.id || node.id === resolved.targetNode.id) continue;
+    if (
+      node.id === resolved.sourceNode.id ||
+      node.id === resolved.targetNode.id
+    )
+      continue;
     obstacles.push(nodeToBoundingBox(node));
   }
 
@@ -229,7 +306,13 @@ export function computeConnectorGeometry(
     },
   );
   const waypoints = edge.waypoints;
-  const routeMidpoint = waypoints[Math.floor(waypoints.length / 2)] ?? midpoint;
+  const routeMidpoint = connectorLabelPoint(
+    waypoints,
+    Object.values(document.nodes)
+      .filter((node) => node.type !== "arrow")
+      .map(nodeToBoundingBox),
+    (arrow.data.label?.length ?? 0) * 7 + 12,
+  );
 
   return {
     isBezier: false,
@@ -239,5 +322,6 @@ export function computeConnectorGeometry(
     sourcePoint,
     targetPoint,
     midpoint: routeMidpoint,
+    labelAnchor: connectorLabelPoint(waypoints, [], 0),
   };
 }

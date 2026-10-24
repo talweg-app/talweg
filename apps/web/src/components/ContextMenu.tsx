@@ -16,11 +16,13 @@ import {
   Square,
   StickyNote,
   Table2,
+  FileText,
+  ImagePlus,
   Trash2,
   Type,
   X,
 } from "lucide-react";
-import type { CanvasNode, NodeStyle } from "@talweg/core";
+import type { CanvasNode, NodeId, NodeStyle } from "@talweg/core";
 import { useTranslation } from "../hooks/useTranslation.js";
 import type { CanvasMode, Point2D, ToolType } from "../types.js";
 import { NodeStylePanel } from "./NodeStylePanel.js";
@@ -29,6 +31,7 @@ export interface ContextMenuState {
   clientPoint: Point2D;
   worldPoint: Point2D;
   nodeId: string | null;
+  cellKey?: string | null;
 }
 
 interface ContextMenuProps {
@@ -36,8 +39,12 @@ interface ContextMenuProps {
   mode: CanvasMode;
   nodes: readonly CanvasNode[];
   onClose: () => void;
+  onTableScope: () => void;
   onCreateNode: (tool: ToolType) => void;
   onUpdateStyle: (style: NodeStyle) => void;
+  onEditNote: (id: NodeId) => void;
+  onRemoveNote: (id: NodeId) => void;
+  onUpdateLabel: (id: NodeId, label: string) => void;
   onDuplicate: () => void;
   onArrange: (front: boolean) => void;
   onDeleteSelected?: (() => void) | undefined;
@@ -54,6 +61,8 @@ const ELEMENTS: readonly {
   icon: typeof Square;
   group: "content" | "shapes";
 }[] = [
+  { tool: "image", icon: ImagePlus, group: "content" },
+  { tool: "markdown", icon: FileText, group: "content" },
   { tool: "sticker", icon: StickyNote, group: "content" },
   { tool: "text", icon: Type, group: "content" },
   { tool: "card", icon: CreditCard, group: "content" },
@@ -71,8 +80,12 @@ export function ContextMenu({
   mode,
   nodes,
   onClose,
+  onTableScope,
   onCreateNode,
   onUpdateStyle,
+  onUpdateLabel,
+  onEditNote,
+  onRemoveNote,
   onDuplicate,
   onArrange,
   onDeleteSelected,
@@ -88,6 +101,7 @@ export function ContextMenu({
     top: state.clientPoint.y,
   });
   const hasSelection = nodes.length > 0;
+  const singleArrow = nodes.length === 1 && nodes[0]?.type === "arrow" ? nodes[0] : null;
 
   useLayoutEffect(() => {
     const rect = menuRef.current?.getBoundingClientRect();
@@ -205,8 +219,26 @@ export function ContextMenu({
       </div>
       {hasSelection ? (
         <>
-          <NodeStylePanel nodes={nodes} onUpdateStyle={onUpdateStyle} />
+          {state.cellKey && <div className="context-table-scope"><span>{t("inspector.cell")} {state.cellKey.split(":").map((part) => Number(part) + 1).join(", ")}</span><button type="button" onClick={onTableScope}>{t("inspector.wholeTable")}</button></div>}
+          {singleArrow && (
+            <div className="context-section connector-description">
+              <label htmlFor="connector-description">{t("inspector.arrowLabel")}</label>
+              <input
+                id="connector-description"
+                autoFocus
+                type="text"
+                maxLength={120}
+                placeholder={t("inspector.arrowLabelPlaceholder")}
+                value={singleArrow.data.label ?? ""}
+                onChange={(event) => { onUpdateLabel(singleArrow.id, event.target.value); }}
+              />
+              <p>{t("inspector.arrowLabelHint")}</p>
+            </div>
+          )}
+        <NodeStylePanel nodes={nodes} onUpdateStyle={onUpdateStyle} />
           <div className="context-section context-actions">
+            {nodes.length === 1 && nodes[0] && nodes[0].type !== "arrow" && action(t(typeof nodes[0].note === "string" ? "note.edit" : "note.add"), FileText, () => { const node = nodes[0]; if (node) onEditNote(node.id); })}
+            {nodes.length === 1 && nodes[0] && typeof nodes[0].note === "string" && nodes[0].type !== "markdown" && action(t("note.remove"), X, () => { const node = nodes[0]; if (node) onRemoveNote(node.id); })}
             {nodes.some((node) => node.type !== "arrow") &&
               action(t("inspector.duplicate"), Copy, onDuplicate)}
             <div className="context-action-pair">

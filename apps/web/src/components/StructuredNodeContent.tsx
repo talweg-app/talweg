@@ -1,11 +1,13 @@
 import type { CSSProperties } from "react";
-import type { ChecklistNode, NodeId, TableNode } from "@talweg/core";
+import type { ChecklistNode, NodeId, TableNode, TextRun } from "@talweg/core";
 import { Plus, Minus } from "lucide-react";
+import { RichText } from "./RichText.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 
 interface StructuredNodeContentProps {
   node: ChecklistNode | TableNode;
   onUpdateData: (id: NodeId, data: Record<string, unknown>) => void;
+  onUpdateRuns: (id: NodeId, field: string, runs: TextRun[]) => void;
   surfaceStyle: CSSProperties;
   textStyle: CSSProperties;
 }
@@ -13,6 +15,7 @@ interface StructuredNodeContentProps {
 export function StructuredNodeContent({
   node,
   onUpdateData,
+  onUpdateRuns,
   surfaceStyle,
   textStyle,
 }: StructuredNodeContentProps) {
@@ -24,13 +27,16 @@ export function StructuredNodeContent({
         className="structured-node checklist-node"
         style={{ ...surfaceStyle, ...textStyle }}
       >
-        <input
+        <RichText
           className="checklist-title"
-          aria-label={t("insert.planTitle")}
+          label={t("insert.planTitle")}
           placeholder={t("insert.planTitle")}
-          value={node.data.title}
-          onChange={(e) => {
-            onUpdateData(node.id, { title: e.target.value });
+          text={node.data.title}
+          runs={node.textRuns?.title}
+          multiline={false}
+          onCommit={(text, runs) => {
+            onUpdateData(node.id, { title: text });
+            onUpdateRuns(node.id, "title", runs);
           }}
         />
         <div className="checklist-items">
@@ -50,34 +56,25 @@ export function StructuredNodeContent({
                   });
                 }}
               />
-              <input
-                type="text"
-                aria-label={t("insert.task")}
+              <RichText
+                label={t("insert.task")}
                 placeholder={t("insert.task")}
-                value={entry.text}
+                text={entry.text}
+                runs={node.textRuns?.[`task:${entry.id}`]}
+                multiline={false}
                 style={{
                   textDecoration: entry.checked ? "line-through" : undefined,
                   opacity: entry.checked ? 0.5 : 1,
                 }}
-                onChange={(e) => {
+                onCommit={(text, runs) => {
                   onUpdateData(node.id, {
                     items: items.map((candidate) =>
                       candidate.id === entry.id
-                        ? { ...candidate, text: e.target.value }
+                        ? { ...candidate, text }
                         : candidate,
                     ),
                   });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    onUpdateData(node.id, {
-                      items: [
-                        ...items,
-                        { id: crypto.randomUUID(), text: "", checked: false },
-                      ],
-                    });
-                  }
+                  onUpdateRuns(node.id, `task:${entry.id}`, runs);
                 }}
               />
               <button
@@ -127,27 +124,84 @@ export function StructuredNodeContent({
             {cells.map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {row.map((cell, columnIndex) => (
-                  <td key={columnIndex}>
-                    <input
-                      aria-label={`${t("insert.cell")} ${String(rowIndex + 1)}, ${String(columnIndex + 1)}`}
+                  <td
+                    key={columnIndex}
+                    data-table-cell={`${String(rowIndex)}:${String(columnIndex)}`}
+                    style={
+                      node.data.cellStyles?.[
+                        `${String(rowIndex)}:${String(columnIndex)}`
+                      ]
+                        ? {
+                            backgroundColor:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.fillColor,
+                            color:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.textColor,
+                            borderColor:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.strokeColor,
+                            borderWidth:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.strokeWidth,
+                            borderStyle:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.strokeDash === "dashed"
+                                ? "dashed"
+                                : node.data.cellStyles[
+                                      `${String(rowIndex)}:${String(columnIndex)}`
+                                    ]?.strokeDash === "dotted"
+                                  ? "dotted"
+                                  : "solid",
+                            fontSize:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.fontSize,
+                            fontWeight:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.fontWeight,
+                            textAlign:
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.textAlign,
+                          }
+                        : undefined
+                    }
+                  >
+                    <RichText
+                      label={`${t("insert.cell")} ${String(rowIndex + 1)}, ${String(columnIndex + 1)}`}
                       placeholder={
                         rowIndex === 0
                           ? `${t("insert.column")} ${String(columnIndex + 1)}`
                           : "—"
                       }
-                      value={cell}
-                      onChange={(e) => {
+                      text={cell}
+                      runs={
+                        node.textRuns?.[
+                          `cell:${String(rowIndex)}:${String(columnIndex)}`
+                        ]
+                      }
+                      onCommit={(text, runs) => {
                         onUpdateData(node.id, {
                           cells: cells.map((currentRow, r) =>
                             r === rowIndex
                               ? currentRow.map((currentCell, c) =>
-                                  c === columnIndex
-                                    ? e.target.value
-                                    : currentCell,
+                                  c === columnIndex ? text : currentCell,
                                 )
                               : currentRow,
                           ),
                         });
+                        onUpdateRuns(
+                          node.id,
+                          `cell:${String(rowIndex)}:${String(columnIndex)}`,
+                          runs,
+                        );
                       }}
                     />
                   </td>
@@ -184,7 +238,14 @@ export function StructuredNodeContent({
           aria-label={t("insert.removeRow")}
           title={t("insert.removeRow")}
           onClick={() => {
-            onUpdateData(node.id, { cells: cells.slice(0, -1) });
+            onUpdateData(node.id, {
+              cells: cells.slice(0, -1),
+              cellStyles: Object.fromEntries(
+                Object.entries(node.data.cellStyles ?? {}).filter(
+                  ([key]) => Number(key.split(":")[0]) < cells.length - 1,
+                ),
+              ),
+            });
           }}
         >
           <Minus size={12} />
@@ -198,6 +259,11 @@ export function StructuredNodeContent({
           onClick={() => {
             onUpdateData(node.id, {
               cells: cells.map((row) => row.slice(0, -1)),
+              cellStyles: Object.fromEntries(
+                Object.entries(node.data.cellStyles ?? {}).filter(
+                  ([key]) => Number(key.split(":")[1]) < columns - 1,
+                ),
+              ),
             });
           }}
         >

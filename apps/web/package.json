@@ -11,12 +11,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/onest": "^5.3.1",
     "@talweg/core": "workspace:*",
     "@talweg/router": "workspace:*",
     "@talweg/storage": "workspace:*",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "yjs": "^13.6.33"
   },
   "devDependencies": {

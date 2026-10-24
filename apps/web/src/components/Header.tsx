@@ -3,18 +3,21 @@ import {
   Check,
   ChevronDown,
   Download,
-  Languages,
   Network,
   Save,
   Share2,
   StickyNote,
 } from "lucide-react";
+import type { StorageAdapter } from "@talweg/storage";
 import type { CameraViewport, CanvasDocument } from "@talweg/core";
 import { useTranslation } from "../hooks/useTranslation.js";
 import type { CanvasMode } from "../types.js";
-import { exportToPng } from "../utils/export.js";
+
+import { getActiveFileName, type FileSaveState } from "../utils/fileSystem.js";
+import { LanguagePicker } from "./LanguagePicker.js";
 
 interface HeaderProps {
+  adapter?: StorageAdapter | null | undefined;
   document: CanvasDocument | null;
   mode: CanvasMode;
   camera?: CameraViewport;
@@ -22,7 +25,8 @@ interface HeaderProps {
   onUpdateTitle?: (title: string) => void;
   onOpenDashboard?: () => void;
   onResetZoom?: () => void;
-  onSave?: () => void;
+  onSave?: () => Promise<boolean>;
+  fileSaveState?: FileSaveState;
 }
 
 const MODES: readonly {
@@ -35,6 +39,7 @@ const MODES: readonly {
 ];
 
 export function Header({
+  adapter,
   document,
   mode,
   camera,
@@ -43,8 +48,9 @@ export function Header({
   onOpenDashboard,
   onResetZoom,
   onSave,
+  fileSaveState = "browser",
 }: HeaderProps) {
-  const { t, toggleLanguage } = useTranslation();
+  const { t } = useTranslation();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -87,9 +93,10 @@ export function Header({
     }, 2000);
   };
 
-  const handleSave = () => {
-    onSave?.();
-    showToast(t("actions.savedLocally"));
+  const handleSave = async () => {
+    try {
+      if (await onSave?.()) showToast(t("actions.savedLocally"));
+    } catch { showToast(t("actions.saveFailed")); }
   };
 
   const handleShare = async () => {
@@ -109,21 +116,26 @@ export function Header({
     showToast(t("actions.linkCopied"));
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!document) return;
-    exportToPng(document, `${document.name || "talweg"}.png`);
+    try {
+      const { exportToPng } = await import("../utils/export.js");
+      await exportToPng(document, `${document.name || "talweg"}.png`, adapter);
+    } catch {
+      showToast(t("actions.exportFailed"));
+    }
   };
 
   const zoomPercent = Math.round((camera?.zoom ?? 1.0) * 100);
   const ActiveModeIcon = MODES.find((m) => m.id === mode)?.icon ?? StickyNote;
 
   return (
-    <header className="h-12 shrink-0 border-b border-white/[0.08] bg-[#191b1c] px-3 flex items-center justify-between z-30 select-none">
+    <header className="canvas-header h-12 shrink-0 border-b border-white/[0.08] bg-[#191b1c] px-3 flex items-center justify-between z-30 select-none">
       <div className="flex items-center gap-1 min-w-0">
         <button
           type="button"
           onClick={onOpenDashboard}
-          className="flex items-center gap-1.5 h-8 px-1.5 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="canvas-brand flex items-center gap-1.5 h-8 px-1.5 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("dashboard.title")}
         >
           <img src="/favicon.svg" alt="" className="w-4 h-4" />
@@ -132,16 +144,18 @@ export function Header({
 
         <div className="h-4 w-px bg-white/[0.08]" />
 
-        <input
+        <div className="canvas-document-heading"><input
           type="text"
           value={document?.name ?? ""}
           onChange={(e) => onUpdateTitle?.(e.target.value)}
           placeholder={t("canvas.titlePlaceholder")}
-          className="bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-xs text-neutral-300 focus:text-neutral-100 px-1.5 h-8 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
+          className="canvas-document-title bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-xs text-neutral-300 focus:text-neutral-100 px-1.5 h-8 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
         />
+        <span className="canvas-save-state" data-state={fileSaveState} role="status" title={fileSaveState === "browser" ? t("files.chooseHint") : getActiveFileName() ?? ""}><span />{t(`files.${fileSaveState}`)}</span>
+        </div>
       </div>
 
-      <div ref={modeMenuRef} className="relative">
+      <div ref={modeMenuRef} className="canvas-mode-picker relative">
         <button
           type="button"
           onClick={() => {
@@ -164,7 +178,7 @@ export function Header({
           <div
             role="menu"
             data-testid="mode-picker-menu"
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none z-50 py-1"
+            className="canvas-mode-menu absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none z-50 py-1"
           >
             {MODES.map((candidate) => {
               const Icon = candidate.icon;
@@ -200,7 +214,7 @@ export function Header({
         )}
       </div>
 
-      <div className="flex items-center gap-px">
+      <div className="canvas-header-actions flex items-center gap-px">
         <button
           type="button"
           onClick={onResetZoom}
@@ -213,14 +227,7 @@ export function Header({
 
         <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
-        <button
-          type="button"
-          onClick={toggleLanguage}
-          className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
-          title={t("tooltips.langToggle")}
-        >
-          <Languages className="w-3.5 h-3.5" />
-        </button>
+        <LanguagePicker compact />
 
         <button
           type="button"
@@ -235,7 +242,7 @@ export function Header({
 
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => { void handleSave(); }}
           className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.save")}
         >
@@ -244,11 +251,14 @@ export function Header({
 
         <button
           type="button"
-          onClick={handleExport}
+          onClick={() => { void handleExport(); }}
           className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.export")}
+          aria-label={t("tooltips.export")}
+          data-action="export"
         >
           <Download className="w-3.5 h-3.5" />
+          <span>{t("actions.exportPng")}</span>
         </button>
       </div>
 

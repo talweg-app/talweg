@@ -111,13 +111,13 @@ test("table cells, added rows, and removed columns survive reload", async ({
   await insert(page, "Table");
   await page.getByLabel("Cell 1, 1", { exact: true }).fill("Milestone");
   await page.reload();
-  await expect(page.getByLabel("Cell 1, 1", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Cell 1, 1", { exact: true })).toHaveText(
     "Milestone",
   );
   await page.getByRole("button", { name: "Row", exact: true }).click();
   await page.getByLabel("Cell 4, 1", { exact: true }).fill("Ship alpha");
   await page.reload();
-  await expect(page.getByLabel("Cell 4, 1", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Cell 4, 1", { exact: true })).toHaveText(
     "Ship alpha",
   );
   await page
@@ -138,7 +138,7 @@ test("checklist completion and empty state survive reload", async ({
     .getByRole("checkbox", { name: "Complete Review canvas", exact: true })
     .check();
   await page.reload();
-  await expect(page.getByLabel("Plan title", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Plan title", { exact: true })).toHaveText(
     "Release",
   );
   await expect(
@@ -148,7 +148,7 @@ test("checklist completion and empty state survive reload", async ({
   await page.reload();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await page.getByRole("button", { name: "Add task", exact: true }).click();
-  await expect(page.getByLabel("Task", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Task", { exact: true })).toHaveText("");
 });
 
 test("context menu stays in view and closes with Escape", async ({

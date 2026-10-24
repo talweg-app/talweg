@@ -107,6 +107,7 @@ export function NodeStylePanel({ nodes, onUpdateStyle }: NodeStylePanelProps) {
       {hasSurface &&
         colorRow("fillColor", node.type === "sticker" ? "#e9dda7" : "#242729")}
       {colorRow("strokeColor", "#727777")}
+      {node.type === "arrow" && colorRow("textColor", "#a1a1aa")}
       <div className="inspector-row">
         <span>{t("inspector.strokeWidth")}</span>
         <div

@@ -18,7 +18,9 @@
     "ellipse": "Ellipse",
     "text": "Text",
     "table": "Table",
-    "checklist": "Checklist"
+    "checklist": "Checklist",
+    "markdown": "Markdown note",
+    "image": "Image"
   },
   "actions": {
     "undo": "Undo",
@@ -33,7 +35,9 @@
     "zoomIn": "Zoom In",
     "zoomOut": "Zoom Out",
     "addChild": "Add Subtopic (Tab)",
-    "addSibling": "Add Sibling (Enter)"
+    "addSibling": "Add Sibling (Enter)",
+    "saveFailed": "Could not save the file. Check that all images are available.",
+    "exportFailed": "Could not export the file."
   },
   "statuses": {
     "todo": "Todo",
@@ -77,24 +81,45 @@
     "rectTarget": "Target Database",
     "rectObstacle": "Gateway Obstacle",
     "tagPlanning": "Planning",
-    "tagCore": "Architecture"
+    "tagCore": "Architecture",
+    "emptyTitle": "Start with one idea",
+    "emptyDescription": "Add a shape, a note, or an image. There’s room for everything else.",
+    "emptyAction": "Choose an element",
+    "connectHint": "Choose a node to connect to",
+    "importImages": "Import images",
+    "reconnectSource": "Reconnect arrow source",
+    "reconnectTarget": "Reconnect arrow target"
   },
   "dashboard": {
     "title": "Talweg Workspace",
-    "subtitle": "Local-First visual platform. Zero cloud tracking, purely native.",
+    "subtitle": "Your boards stay on this device.",
     "openFromComputer": "Open from Computer",
     "templates": "Starter Templates",
     "recentBoards": "Recent Boards",
     "noRecent": "No saved boards yet. Create one from a template or start blank.",
     "elements": "elements",
     "blankTitle": "Blank Canvas",
-    "blankDesc": "Clean infinite space with zero presets",
+    "blankDesc": "Ideas, notes, and sketches. Arrange them your way.",
     "microTitle": "Microservices Architecture",
-    "microDesc": "Distributed system with live 90° orthogonal edge routing",
-    "sprintTitle": "Sprint Planning Mindmap",
-    "sprintDesc": "Hierarchical backlog branches with smooth Bezier vectors",
+    "microDesc": "Connect services and data flows in one clear diagram.",
+    "sprintTitle": "Sprint plan",
+    "sprintDesc": "Break down your goals, outline tasks, and connect ideas.",
     "close": "Close Dashboard",
-    "active": "active"
+    "active": "active",
+    "workspace": "Workspace",
+    "eyebrow": "A little space to think",
+    "heroTitle": "Give your ideas room.",
+    "heroDescription": "Connect thoughts, sketch a process, or make a plan. Start with a blank canvas or a ready-made example.",
+    "chooseStartingPoint": "Choose a starting point",
+    "onlyOnDevice": "Stored on this device",
+    "loading": "Loading your boards…",
+    "searchBoards": "Find a board…",
+    "showBoards": "Working boards",
+    "showHidden": "Hidden boards",
+    "restoreBoard": "Restore board",
+    "hideBoard": "Hide board",
+    "noMatches": "No boards match your search.",
+    "noHidden": "No hidden boards."
   },
   "contextMenu": {
     "add": "Add",
@@ -126,7 +151,12 @@
     "close": "Close",
     "duplicate": "Duplicate",
     "bringFront": "To front",
-    "sendBack": "To back"
+    "sendBack": "To back",
+    "cell": "Cell",
+    "wholeTable": "Whole table",
+    "arrowLabel": "Connector description",
+    "arrowLabelPlaceholder": "For example: User created",
+    "arrowLabelHint": "Displayed beside the line. Clear the field to remove it."
   },
   "insert": {
     "title": "Add to canvas",
@@ -146,5 +176,59 @@
     "row": "Row",
     "removeRow": "Remove last row",
     "removeColumn": "Remove last column"
+  },
+  "richText": {
+    "selectionColor": "Selected text formatting",
+    "color": "Text",
+    "fragment": "Selection color",
+    "customColor": "Custom selection color",
+    "label": "Label",
+    "cardTitle": "Card title",
+    "description": "Description",
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "strike": "Strikethrough",
+    "fontSize": "Text size",
+    "link": "Add link",
+    "unlink": "Remove link",
+    "linkTarget": "Choose a page and node",
+    "externalUrl": "Website address",
+    "applyLink": "Apply",
+    "invalidUrl": "Enter a valid http:// or https:// address."
+  },
+  "note": {
+    "title": "Node note",
+    "untitled": "Untitled note",
+    "open": "Open note",
+    "view": "Note view",
+    "edit": "Edit description",
+    "preview": "Preview",
+    "addImage": "Add image to note",
+    "import": "Import Markdown",
+    "export": "Download Markdown",
+    "body": "Markdown text",
+    "placeholder": "# A thought worth keeping\n\nWrite a note, add an image, keep the details here.",
+    "saved": "Saved on this device",
+    "characters": "characters",
+    "empty": "Nothing written yet.",
+    "nodeHint": "Open to write in Markdown",
+    "imageError": "Choose an image smaller than 20 MB.",
+    "fileError": "Choose a Markdown file smaller than 10 MB.",
+    "localImageOnly": "Add this image from your device to keep it in the document.",
+    "add": "Add description",
+    "remove": "Remove description"
+  },
+  "pages": {
+    "add": "Add page",
+    "delete": "Delete page"
+  },
+  "files": {
+    "browser": "Saved in this browser",
+    "file": "File autosave on",
+    "saving": "Writing to file…",
+    "error": "File error · browser copy kept",
+    "chooseHint": "Save once to choose a file and enable automatic writes for this session.",
+    "browser-error": "Browser storage failed · save a file"
   }
 }

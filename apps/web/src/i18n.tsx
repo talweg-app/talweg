@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -10,25 +8,11 @@ import {
 import en from "./locales/en.json";
 import ru from "./locales/ru.json";
 
-export type Language = "en" | "ru";
+import { I18nContext, type Language } from "./i18nContext.js";
 
 type TranslationSchema = typeof en;
-
-const translations: Record<Language, TranslationSchema> = {
-  en,
-  ru,
-};
-
+const translations: Record<Language, TranslationSchema> = { en, ru };
 const STORAGE_KEY = "talweg_lang";
-
-interface I18nContextValue {
-  language: Language;
-  setLanguage: (lang: Language) => void;
-  toggleLanguage: () => void;
-  t: (path: string, fallback?: string) => string;
-}
-
-const I18nContext = createContext<I18nContextValue | null>(null);
 
 function resolveTranslation(dictionary: unknown, path: string): string | null {
   const parts = path.split(".");
@@ -49,7 +33,7 @@ export function LanguageProvider({ children }: { readonly children: ReactNode })
     if (typeof window === "undefined") return "en";
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved === "en" || saved === "ru") return saved;
-    return navigator.language.startsWith("ru") ? "ru" : "en";
+    return "en";
   });
 
   const setLanguage = useCallback((next: Language) => {
@@ -85,12 +69,4 @@ export function LanguageProvider({ children }: { readonly children: ReactNode })
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-}
-
-export function useTranslation(): I18nContextValue {
-  const context = useContext(I18nContext);
-  if (!context) {
-    throw new Error("useTranslation must be used within a LanguageProvider");
-  }
-  return context;
 }

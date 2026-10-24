@@ -8,6 +8,7 @@ export type FractionalIndex = string;
 export type PageId = string;
 
 export type NodeType =
+  | "markdown"
   | "table"
   | "checklist"
   | "rectangle"
@@ -80,7 +81,20 @@ export interface NodeStyle {
   lineHeight?: number;
 }
 
+export interface TextRun {
+  text: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  fontSize?: number;
+  href?: string;
+}
+
 export interface CanvasNodeBase {
+  textRuns?: Record<string, TextRun[]>;
+  note?: string | null;
   readonly id: NodeId;
   readonly type: NodeType;
   pageId?: PageId;
@@ -235,7 +249,7 @@ export interface EllipseNode extends CanvasNodeBase {
 
 export interface TableNode extends CanvasNodeBase {
   readonly type: "table";
-  data: { cells: string[][] };
+  data: { cells: string[][]; cellStyles?: Record<string, NodeStyle> };
 }
 
 export interface ChecklistNode extends CanvasNodeBase {
@@ -246,7 +260,13 @@ export interface ChecklistNode extends CanvasNodeBase {
   };
 }
 
+export interface MarkdownNode extends CanvasNodeBase {
+  readonly type: "markdown";
+  data: { title: string };
+}
+
 export type CanvasNode =
+  | MarkdownNode
   | EllipseNode
   | TableNode
   | ChecklistNode

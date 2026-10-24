@@ -36,6 +36,7 @@ export function createCanvasNode(
     },
   };
   switch (tool) {
+    case "markdown": return { ...base, type: tool, width: 240, height: 120, x: x - 120, y: y - 60, data: { title: "" }, note: "" };
     case "rectangle":
       return { ...base, type: tool, data: { label: "" } };
     case "ellipse":
