@@ -59,7 +59,7 @@ export default function CanvasView({ documentId, pageId, onOpenDashboard }: Canv
 
   if (!isLoaded) {
     return (
-      <div className="w-screen h-screen flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3 font-mono text-xs">
+      <div className="w-screen h-screen flex flex-col items-center justify-center bg-[var(--canvas-bg)] text-[var(--ink-muted)] gap-3 font-mono text-xs">
         <div className="w-6 h-6 border-2 border-neutral-600 border-t-neutral-200 rounded-full animate-spin" />
         <span className="tracking-wider uppercase text-[10px]">{t("dashboard.loading")}</span>
       </div>
@@ -69,7 +69,7 @@ export default function CanvasView({ documentId, pageId, onOpenDashboard }: Canv
   const selectedFirstId = selectedNodeIds.size > 0 ? [...selectedNodeIds][0] : undefined;
 
   return (
-    <div className="flex flex-col w-screen h-screen overflow-hidden bg-neutral-950 text-neutral-100 font-sans antialiased">
+    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--canvas-bg)] text-[var(--ink)] font-sans antialiased">
       <Header
         document={document}
         adapter={adapter}

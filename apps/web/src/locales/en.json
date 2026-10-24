@@ -156,7 +156,11 @@
     "wholeTable": "Whole table",
     "arrowLabel": "Connector description",
     "arrowLabelPlaceholder": "For example: User created",
-    "arrowLabelHint": "Displayed beside the line. Clear the field to remove it."
+    "arrowLabelHint": "Displayed beside the line. Clear the field to remove it.",
+    "verticalAlign": "Vertical alignment",
+    "top": "Top",
+    "middle": "Middle",
+    "bottom": "Bottom"
   },
   "insert": {
     "title": "Add to canvas",
@@ -230,5 +234,11 @@
     "error": "File error · browser copy kept",
     "chooseHint": "Save once to choose a file and enable automatic writes for this session.",
     "browser-error": "Browser storage failed · save a file"
+  },
+  "theme": {
+    "label": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
   }
 }

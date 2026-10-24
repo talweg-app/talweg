@@ -8,6 +8,9 @@ import type {
 } from "@talweg/core";
 import type { StorageAdapter } from "@talweg/storage";
 import { CheckCircle2, Circle, Clock, FileText, Flame } from "lucide-react";
+import { useTheme } from "../hooks/useTheme.js";
+import { canvasBackground } from "../themeContext.js";
+import { ensureTextContrast, resolveFillColor } from "../utils/colorContrast.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { StructuredNodeContent } from "./StructuredNodeContent.js";
 import { RichText } from "./RichText.js";
@@ -46,6 +49,7 @@ export function NodeRenderer({
   onStartConnect,
 }: NodeRendererProps) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   useEffect(() => {
@@ -60,9 +64,11 @@ export function NodeRenderer({
     setNoteOpen(false);
   }, []);
   if (node.type === "arrow" || node.type === "group") return null;
+  const backgroundColor = resolveFillColor(node.style.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"), canvasBackground[theme]);
+  const verticalAlignment = ({ top: "flex-start", middle: "center", bottom: "flex-end" } as const)[node.style.verticalAlign ?? (node.type === "text" ? "top" : "middle")];
   const typography: CSSProperties = {
     color:
-      node.style.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"),
+      ensureTextContrast(node.style.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"), backgroundColor),
     fontSize: node.style.fontSize ?? 14,
     fontWeight: node.style.fontWeight ?? 400,
     fontFamily: node.style.fontFamily,
@@ -105,6 +111,7 @@ export function NodeRenderer({
       multiline={multiline}
       autoFocus={isEditing}
       style={typography}
+      backgroundColor={backgroundColor}
       onBlur={() => {
         setIsEditing(false);
       }}
@@ -208,6 +215,7 @@ export function NodeRenderer({
           className="node-shape"
           style={{
             ...typography,
+            alignItems: verticalAlignment,
             ...(node.type === "diamond" || node.type === "cylinder"
               ? {}
               : surface),
@@ -258,7 +266,7 @@ export function NodeRenderer({
         </div>
       )}
       {node.type === "text" && (
-        <div className="node-text" style={{ ...surface, ...typography }}>
+        <div className="node-text" style={{ ...surface, ...typography, alignItems: verticalAlignment }}>
           {rich("text", node.data.text, t("tools.text"), isEditing)}
         </div>
       )}

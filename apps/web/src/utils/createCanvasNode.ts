@@ -6,6 +6,7 @@ export function createCanvasNode(
   tool: ToolType,
   point: Point2D,
   mode: CanvasMode,
+  theme: "light" | "dark" = "dark",
 ): CanvasNode | null {
   const x =
     mode === "diagrams" ? Math.round(point.x / 16) * 16 : Math.round(point.x);
@@ -27,11 +28,11 @@ export function createCanvasNode(
     createdAt: timestamp,
     updatedAt: timestamp,
     style: {
-      fillColor: "#242729",
+      fillColor: theme === "light" ? "#ffffff" : "#242729",
       strokeColor: "#727777",
       strokeWidth: 1,
       cornerRadius: 6,
-      textColor: "#eeeeeb",
+      textColor: theme === "light" ? "#202223" : "#eeeeeb",
       fontSize: 14,
     },
   };

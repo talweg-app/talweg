@@ -7,6 +7,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { TextRun } from "@talweg/core";
+import { ensureTextContrast } from "../utils/colorContrast.js";
 import { formatTextRange, normalizeExternalUrl } from "../utils/textRuns.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 
@@ -23,6 +24,7 @@ interface RichTextProps {
   autoFocus?: boolean;
   className?: string;
   style?: CSSProperties;
+  backgroundColor?: string;
   onCommit: (text: string, runs: TextRun[]) => void;
   onBlur?: (() => void) | undefined;
 }
@@ -75,6 +77,7 @@ export function RichText({
   autoFocus = false,
   className = "",
   style,
+  backgroundColor,
   onCommit,
   onBlur,
 }: RichTextProps) {
@@ -150,7 +153,11 @@ export function RichText({
         }
       }
     }
-  }, [content, editing, selection]);
+    for (const span of editor.querySelectorAll<HTMLElement>("[data-text-color]")) {
+      const color = span.dataset.textColor;
+      if (color) span.style.color = backgroundColor ? ensureTextContrast(color, backgroundColor) : color;
+    }
+  }, [content, editing, selection, backgroundColor]);
 
   useLayoutEffect(() => {
     if (autoFocus && editing) editorRef.current?.focus();
@@ -245,7 +252,7 @@ export function RichText({
         onContextMenu={(event) => {
           const selected = window.getSelection();
           if (
-            selected &&
+            editing && selected &&
             !selected.isCollapsed &&
             editorRef.current?.contains(selected.anchorNode)
           ) {
@@ -267,6 +274,10 @@ export function RichText({
             onBlur?.();
           }
           if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            const selected = window.getSelection();
+            if (selected?.rangeCount && editorRef.current?.contains(selected.anchorNode)) selected.collapseToEnd();
             setSelection(null);
             onBlur?.();
           }

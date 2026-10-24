@@ -30,11 +30,11 @@ import type {
 } from "../types.js";
 import { buildPortSlotMap } from "../utils/connectorGeometry.js";
 import { createId } from "../utils/template.js";
-import { readableTextColor } from "../utils/textRuns.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { useCanvasGestures } from "../hooks/useCanvasGestures.js";
 import { pageNodes } from "../utils/pageNodes.js";
 import { resizeNodeContent } from "../utils/resizeNodeContent.js";
+import { useTheme } from "../hooks/useTheme.js";
 import { createCanvasNode } from "../utils/createCanvasNode.js";
 import { ArrowSelectionOverlay } from "./ArrowSelectionOverlay.js";
 import { ConnectorRenderer } from "./ConnectorRenderer.js";
@@ -139,6 +139,7 @@ export function Canvas({
   onDeletePage,
 }: CanvasProps) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const [hintDismissed, setHintDismissed] = useState(false);
   useEffect(() => {
     const dismiss = (event: Event) => {
@@ -243,13 +244,13 @@ export function Canvas({
         imageInputRef.current?.click();
         return true;
       }
-      const node = createCanvasNode(tool, worldPoint, mode);
+      const node = createCanvasNode(tool, worldPoint, mode, theme);
       if (!node) return false;
       onAddNode(node);
       onSelectTool("select");
       return true;
     },
-    [mode, onAddNode, onSelectTool, camera, containerRef],
+    [mode, onAddNode, onSelectTool, camera, containerRef, theme],
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -676,9 +677,9 @@ export function Canvas({
     <div
       ref={containerRef}
       data-testid="canvas"
-      className={`relative w-full h-full overflow-hidden overscroll-none bg-[#101112] select-none touch-none ${cursorClass}`}
+      className={`relative w-full h-full overflow-hidden overscroll-none bg-[var(--canvas-bg)] select-none touch-none ${cursorClass}`}
       style={{
-        backgroundImage: "radial-gradient(circle, rgba(255, 255, 255, 0.055) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)",
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
         backgroundPosition: `${String(gridOffsetX)}px ${String(gridOffsetY)}px`,
       }}
@@ -822,7 +823,7 @@ export function Canvas({
 
       {/* Floating Status Badge when Connecting Nodes */}
       {connectingSourceId && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#16181c] border border-white/[0.08] text-neutral-300 px-3 h-8 flex items-center rounded text-xs shadow-md pointer-events-none">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[var(--panel)] border border-[var(--panel-border)] text-[var(--ink)] px-3 h-8 flex items-center rounded text-xs shadow-md pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400/90 mr-1.5" />
           <span>{t("canvas.connectHint")}</span>
         </div>
@@ -849,11 +850,9 @@ export function Canvas({
           onUpdateStyle={(style) => {
             for (const id of selectedNodeIds) {
               const node = document?.nodes[id];
-              const nextStyle = { ...style };
-              if (node?.type === "table" && style.fillColor) nextStyle.textColor = readableTextColor(style.fillColor);
               if (node?.type === "table" && contextMenu.cellKey) {
-                onUpdateNodeData(id, { cellStyles: { ...node.data.cellStyles, [contextMenu.cellKey]: { ...node.data.cellStyles?.[contextMenu.cellKey], ...nextStyle } } });
-              } else onUpdateNodeStyle(id, nextStyle);
+                onUpdateNodeData(id, { cellStyles: { ...node.data.cellStyles, [contextMenu.cellKey]: { ...node.data.cellStyles?.[contextMenu.cellKey], ...style } } });
+              } else onUpdateNodeStyle(id, { ...style });
             }
           }}
           onTableScope={() => { setContextMenu({ ...contextMenu, cellKey: null }); }}

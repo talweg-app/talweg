@@ -163,15 +163,15 @@ export function ConnectorRenderer({
               width={arrow.data.label.length * 7 + 12}
               height={18}
               rx={3}
-              fill="#090a0f"
-              stroke="#27272a"
+              fill="var(--canvas-label-bg)"
+              stroke="var(--canvas-label-border)"
               strokeWidth={1}
             />
             <text
               x={0}
               y={3}
               textAnchor="middle"
-              fill={arrow.style.textColor ?? "#a1a1aa"}
+              fill={arrow.style.textColor ?? "var(--canvas-label-ink)"}
               fontSize={10}
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontWeight={500}

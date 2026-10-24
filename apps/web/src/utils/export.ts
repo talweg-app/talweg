@@ -1,3 +1,4 @@
+import { canvasBackground, type Theme } from "../themeContext.js";
 import {
   type ArrowNode,
   type CanvasDocument,
@@ -16,10 +17,12 @@ export async function exportToPng(
   document: CanvasDocument,
   filename = "talweg-canvas.png",
   adapter?: StorageAdapter | null,
+  theme: Theme = "dark",
 ): Promise<void> {
   const visibleNodes = Object.values(pageNodes(document, document.activePageId ?? firstPageId(document))).filter((node) => node.isVisible);
   const nodes = visibleNodes.filter((node) => node.type !== "arrow");
   if (nodes.length === 0) return;
+  await window.document.fonts.ready;
 
   const images = new Map<string, HTMLImageElement>();
   await Promise.all(
@@ -50,14 +53,14 @@ export async function exportToPng(
   ctx.scale(pixelRatio, pixelRatio);
 
   // Background
-  ctx.fillStyle = "#101112";
+  ctx.fillStyle = canvasBackground[theme];
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
   const originX = bounds.minX - padding;
   const originY = bounds.minY - padding;
 
   // Grid dots
-  ctx.fillStyle = "#202223";
+  ctx.fillStyle = theme === "light" ? "#dce1df" : "#202223";
   const gridSize = 24;
   const startX = Math.floor(originX / gridSize) * gridSize;
   const startY = Math.floor(originY / gridSize) * gridSize;
@@ -129,7 +132,7 @@ export async function exportToPng(
     );
     ctx.rotate((node.rotation * Math.PI) / 180);
     ctx.translate(-node.width / 2, -node.height / 2);
-    drawNode(ctx, node, images.get(node.id));
+    drawNode(ctx, node, images.get(node.id), canvasBackground[theme]);
     ctx.restore();
   }
 
@@ -141,8 +144,8 @@ export async function exportToPng(
   ctx.textBaseline = "middle";
   for (const item of edgeLabels) {
     const textWidth = ctx.measureText(item.text).width;
-    ctx.fillStyle = "#090a0f";
-    ctx.strokeStyle = "#27272a";
+    ctx.fillStyle = theme === "light" ? "#ffffff" : "#090a0f";
+    ctx.strokeStyle = theme === "light" ? "#d3d9d7" : "#27272a";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(
@@ -154,7 +157,7 @@ export async function exportToPng(
     );
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#a1a1aa";
+    ctx.fillStyle = theme === "light" ? "#505b57" : "#a1a1aa";
     ctx.fillText(item.text, item.x, item.y);
   }
   ctx.restore();

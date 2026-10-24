@@ -1,9 +1,11 @@
+import { ensureTextContrast, resolveFillColor } from "./colorContrast.js";
 import type { CanvasNode, NodeStyle, TextRun } from "@talweg/core";
 
 export function drawNode(
   ctx: CanvasRenderingContext2D,
   node: CanvasNode,
   image?: HTMLImageElement,
+  backgroundColor = "#101112",
 ): void {
   const { width, height, style } = node;
   const radius =
@@ -49,7 +51,8 @@ export function drawNode(
     field = "label",
     override?: NodeStyle,
   ) => {
-    const paintColor = override?.textColor ?? textColor;
+    const paintBackground = resolveFillColor(override?.fillColor ?? fillColor, backgroundColor);
+    const paintColor = ensureTextContrast(override?.textColor ?? textColor, paintBackground);
     const paintSize = override?.fontSize ?? fontSize;
     const paintAlign = override?.textAlign === "justify" ? "left" : (override?.textAlign ?? align);
     const weight = override?.fontWeight ?? style.fontWeight ?? 400;
@@ -58,13 +61,22 @@ export function drawNode(
     ctx.rect(0, 0, width, height);
     ctx.clip();
     ctx.fillStyle = paintColor;
-    ctx.font = `${String(weight === "medium" ? 500 : weight === "semibold" ? 600 : weight)} ${String(paintSize)}px ${style.fontFamily ?? "sans-serif"}`;
+    const family = style.fontFamily ?? '"Onest Variable", sans-serif';
+    ctx.font = `${String(weight === "medium" ? 500 : weight === "semibold" ? 600 : weight)} ${String(paintSize)}px ${family}`;
     ctx.textAlign = paintAlign;
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "alphabetic";
     const runs = node.textRuns?.[field];
     const lines = content.split("\n");
-    const lineHeight = Math.max(paintSize, ...(runs ?? []).map((run) => run.fontSize ?? paintSize)) * 1.5;
-    const startY = centered ? y - (lines.length * lineHeight) / 2 : y;
+    const largestSize = Math.max(paintSize, ...(runs ?? []).map((run) => run.fontSize ?? paintSize));
+    const lineHeight = largestSize * 1.5;
+    const metrics = ctx.measureText("Mg");
+    const baseline = lineHeight / 2 + (metrics.fontBoundingBoxAscent - metrics.fontBoundingBoxDescent) * (largestSize / paintSize) / 2;
+    const positioned = ["text", "rectangle", "ellipse", "diamond", "capsule", "cylinder"].includes(node.type);
+    const verticalAlign = style.verticalAlign ?? (centered ? "middle" : "top");
+    const padding = node.type === "text" ? 8 : 12;
+    const startY = positioned
+      ? verticalAlign === "middle" ? (height - lines.length * lineHeight) / 2 : verticalAlign === "bottom" ? height - padding - lines.length * lineHeight : padding
+      : centered ? y - (lines.length * lineHeight) / 2 : y;
     const textX =
       paintAlign === "center"
         ? x + maxWidth / 2
@@ -73,11 +85,11 @@ export function drawNode(
           : x;
     let offset = 0;
     lines.forEach((line, index) => {
-      const y = startY + index * lineHeight;
+      const y = startY + index * lineHeight + baseline;
       if (runs?.map((run) => run.text).join("") !== content)
         ctx.fillText(line, textX, y, maxWidth);
       else {
-        const fontFor = (run: TextRun) => `${run.italic ? "italic " : ""}${String(run.bold === undefined ? (weight === "medium" ? 500 : weight === "semibold" ? 600 : weight) : run.bold ? 700 : 400)} ${String(run.fontSize ?? paintSize)}px ${style.fontFamily ?? "sans-serif"}`;
+        const fontFor = (run: TextRun) => `${run.italic ? "italic " : ""}${String(run.bold === undefined ? (weight === "medium" ? 500 : weight === "semibold" ? 600 : weight) : run.bold ? 700 : 400)} ${String(run.fontSize ?? paintSize)}px ${family}`;
         let runOffset = 0;
         const fragments: { run: TextRun; fragment: string; width: number }[] = [];
         for (const run of runs) {
@@ -100,11 +112,11 @@ export function drawNode(
         let advance = 0;
         for (const { run, fragment, width: fragmentWidth } of fragments) {
           ctx.font = fontFor(run);
-          ctx.fillStyle = run.color ?? paintColor;
+          ctx.fillStyle = ensureTextContrast(run.color ?? paintColor, paintBackground);
           ctx.fillText(fragment, advance, 0);
           ctx.strokeStyle = ctx.fillStyle;
           ctx.lineWidth = Math.max(1, (run.fontSize ?? paintSize) / 16);
-          for (const position of [run.underline || run.href ? (run.fontSize ?? paintSize) * 1.1 : null, run.strike ? (run.fontSize ?? paintSize) * .55 : null]) {
+          for (const position of [run.underline || run.href ? (run.fontSize ?? paintSize) * .12 : null, run.strike ? -(run.fontSize ?? paintSize) * .3 : null]) {
             if (position === null) continue;
             ctx.beginPath(); ctx.moveTo(advance, position); ctx.lineTo(advance + fragmentWidth, position); ctx.stroke();
           }
@@ -189,7 +201,7 @@ export function drawNode(
         if (y + 20 > height) return;
         ctx.beginPath();
         ctx.rect(16, y + 2, 13, 13);
-        ctx.strokeStyle = textColor;
+        ctx.strokeStyle = ensureTextContrast(textColor, resolveFillColor(fillColor, backgroundColor));
         ctx.lineWidth = 1;
         ctx.setLineDash([]);
         ctx.stroke();
@@ -228,15 +240,32 @@ export function drawNode(
       const columns = node.data.cells[0]?.length ?? 1;
       const cellWidth = width / columns;
       const cellHeight = height / Math.max(rows, 1);
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(0, 0, width, height, radius);
+      ctx.clip();
       node.data.cells.forEach((row, r) => {
         row.forEach((cell, c) => {
-          ctx.strokeStyle = style.strokeColor ?? "#727777";
-          ctx.lineWidth = 1;
-          ctx.setLineDash([]);
-          ctx.strokeRect(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
-          text(cell, c * cellWidth + 10, r * cellHeight + 10, cellWidth - 20);
+          const cellKey = `${String(r)}:${String(c)}`;
+          const ownStyle = node.data.cellStyles?.[cellKey];
+          const cellStyle = { ...style, ...ownStyle };
+          if (ownStyle?.fillColor) {
+            ctx.fillStyle = ownStyle.fillColor;
+            ctx.fillRect(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
+          }
+          ctx.strokeStyle = cellStyle.strokeColor ?? "#727777";
+          ctx.lineWidth = cellStyle.strokeWidth ?? 1;
+          ctx.setLineDash(cellStyle.strokeDash === "dashed" ? [8, 5] : cellStyle.strokeDash === "dotted" ? [2, 4] : []);
+          if (cellStyle.strokeDash !== "none" && ctx.lineWidth > 0) ctx.strokeRect(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
+          ctx.clip();
+          text(cell, c * cellWidth + 10, r * cellHeight + 10, cellWidth - 20, false, `cell:${cellKey}`, { ...cellStyle, fontWeight: cellStyle.fontWeight ?? (r === 0 ? 600 : 400) });
+          ctx.restore();
         });
       });
+      ctx.restore();
       break;
     }
   }

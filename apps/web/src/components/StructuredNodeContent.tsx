@@ -2,6 +2,9 @@ import type { CSSProperties } from "react";
 import type { ChecklistNode, NodeId, TableNode, TextRun } from "@talweg/core";
 import { Plus, Minus } from "lucide-react";
 import { RichText } from "./RichText.js";
+import { useTheme } from "../hooks/useTheme.js";
+import { canvasBackground } from "../themeContext.js";
+import { ensureTextContrast, resolveFillColor } from "../utils/colorContrast.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 
 interface StructuredNodeContentProps {
@@ -20,6 +23,8 @@ export function StructuredNodeContent({
   textStyle,
 }: StructuredNodeContentProps) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
+  const backgroundColor = resolveFillColor(node.style.fillColor ?? "#242729", canvasBackground[theme]);
   if (node.type === "checklist") {
     const items = node.data.items;
     return (
@@ -28,6 +33,7 @@ export function StructuredNodeContent({
         style={{ ...surfaceStyle, ...textStyle }}
       >
         <RichText
+          backgroundColor={backgroundColor}
           className="checklist-title"
           label={t("insert.planTitle")}
           placeholder={t("insert.planTitle")}
@@ -57,6 +63,7 @@ export function StructuredNodeContent({
                 }}
               />
               <RichText
+                backgroundColor={backgroundColor}
                 label={t("insert.task")}
                 placeholder={t("insert.task")}
                 text={entry.text}
@@ -136,10 +143,7 @@ export function StructuredNodeContent({
                               node.data.cellStyles[
                                 `${String(rowIndex)}:${String(columnIndex)}`
                               ]?.fillColor,
-                            color:
-                              node.data.cellStyles[
-                                `${String(rowIndex)}:${String(columnIndex)}`
-                              ]?.textColor,
+                            color: ensureTextContrast(node.data.cellStyles[`${String(rowIndex)}:${String(columnIndex)}`]?.textColor ?? node.style.textColor ?? "#eeeeeb", resolveFillColor(node.data.cellStyles[`${String(rowIndex)}:${String(columnIndex)}`]?.fillColor ?? backgroundColor, backgroundColor)),
                             borderColor:
                               node.data.cellStyles[
                                 `${String(rowIndex)}:${String(columnIndex)}`
@@ -175,6 +179,7 @@ export function StructuredNodeContent({
                     }
                   >
                     <RichText
+                      backgroundColor={resolveFillColor(node.data.cellStyles?.[`${String(rowIndex)}:${String(columnIndex)}`]?.fillColor ?? backgroundColor, backgroundColor)}
                       label={`${t("insert.cell")} ${String(rowIndex + 1)}, ${String(columnIndex + 1)}`}
                       placeholder={
                         rowIndex === 0

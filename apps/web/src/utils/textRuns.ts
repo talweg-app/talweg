@@ -31,21 +31,7 @@ export function colorTextRange(runs: readonly TextRun[], start: number, end: num
   return formatTextRange(runs, start, end, { color });
 }
 
-export function readableTextColor(fill: string): string {
-  const hex = /^#([\da-f]{6})$/i.exec(fill)?.[1];
-  if (!hex) return "#eeeeeb";
-  const rgb = [0, 2, 4]
-    .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
-    .map((value) =>
-      value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
-    );
-  return (rgb[0] ?? 0) * 0.2126 +
-    (rgb[1] ?? 0) * 0.7152 +
-    (rgb[2] ?? 0) * 0.0722 >
-    0.35
-    ? "#202223"
-    : "#eeeeeb";
-}
+export { readableTextColor } from "./colorContrast.js";
 
 export function normalizeExternalUrl(value: string): string | null {
   const address = value.trim();

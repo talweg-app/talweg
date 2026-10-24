@@ -75,7 +75,7 @@ export function App() {
         />
       ) : (
         <Suspense fallback={
-          <div className="w-screen h-screen bg-[#101112]" role="status" aria-label="Loading canvas" />
+          <div className="w-screen h-screen bg-[var(--canvas-bg)]" role="status" aria-label="Loading canvas" />
         }>
           <CanvasView
             key={route.boardId}

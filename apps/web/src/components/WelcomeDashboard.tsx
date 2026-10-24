@@ -30,6 +30,7 @@ import {
 } from "../utils/starterTemplates.js";
 
 import { hiddenBoardIds, setBoardHidden, templateDraftIds } from "../utils/boardLibrary.js";
+import { ThemePicker } from "./ThemePicker.js";
 import { LanguagePicker } from "./LanguagePicker.js";
 
 interface WelcomeDashboardProps {
@@ -217,8 +218,8 @@ export function WelcomeDashboard({
           <span className="workspace-header-caption">{t("dashboard.workspace")}</span>
         </div>
         <div className="workspace-header-actions">
-          <LanguagePicker />
-          <button type="button" onClick={() => { void handleOpenFromFile(); }} className="workspace-open-file">
+          <div className="workspace-preferences"><ThemePicker /><LanguagePicker /></div>
+          <button type="button" onClick={() => { void handleOpenFromFile(); }} className="workspace-open-file" aria-label={t("dashboard.openFromComputer")} title={t("dashboard.openFromComputer")}>
             <FolderOpen size={15} />
             <span>{t("dashboard.openFromComputer")}</span>
           </button>

@@ -14,6 +14,8 @@ import { useTranslation } from "../hooks/useTranslation.js";
 import type { CanvasMode } from "../types.js";
 
 import { getActiveFileName, type FileSaveState } from "../utils/fileSystem.js";
+import { useTheme } from "../hooks/useTheme.js";
+import { ThemePicker } from "./ThemePicker.js";
 import { LanguagePicker } from "./LanguagePicker.js";
 
 interface HeaderProps {
@@ -120,12 +122,13 @@ export function Header({
     if (!document) return;
     try {
       const { exportToPng } = await import("../utils/export.js");
-      await exportToPng(document, `${document.name || "talweg"}.png`, adapter);
+      await exportToPng(document, `${document.name || "talweg"}.png`, adapter, theme);
     } catch {
       showToast(t("actions.exportFailed"));
     }
   };
 
+  const { theme } = useTheme();
   const zoomPercent = Math.round((camera?.zoom ?? 1.0) * 100);
   const ActiveModeIcon = MODES.find((m) => m.id === mode)?.icon ?? StickyNote;
 
@@ -166,10 +169,11 @@ export function Header({
               ? "bg-white/[0.07] text-neutral-100"
               : "text-neutral-300 hover:bg-white/[0.05] hover:text-neutral-100"
           }`}
+          aria-label={t(`modes.${mode}`)}
           aria-haspopup="menu"
           aria-expanded={modeMenuOpen}
         >
-          <ActiveModeIcon className="w-3.5 h-3.5 text-[#e9dda7]" />
+          <ActiveModeIcon className="w-3.5 h-3.5 text-[var(--accent)]" />
           <span>{t(`modes.${mode}`)}</span>
           <ChevronDown className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`} />
         </button>
@@ -178,7 +182,7 @@ export function Header({
           <div
             role="menu"
             data-testid="mode-picker-menu"
-            className="canvas-mode-menu absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none z-50 py-1"
+            className="canvas-mode-menu absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[var(--panel)] border border-[var(--panel-border)] rounded shadow-md select-none z-50 py-1"
           >
             {MODES.map((candidate) => {
               const Icon = candidate.icon;
@@ -197,7 +201,7 @@ export function Header({
                     isActive ? "bg-white/[0.05]" : "hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-[#e9dda7]" : "text-neutral-500"}`} />
+                  <Icon className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-[var(--accent)]" : "text-neutral-500"}`} />
                   <span className="flex flex-col gap-0.5">
                     <span className={`text-xs ${isActive ? "text-neutral-100" : "text-neutral-300"}`}>
                       {t(`modes.${candidate.id}`)}
@@ -206,7 +210,7 @@ export function Header({
                       {t(`tooltips.mode${candidate.id.charAt(0).toUpperCase()}${candidate.id.slice(1)}`)}
                     </span>
                   </span>
-                  {isActive && <Check className="w-3.5 h-3.5 text-[#e9dda7] ml-auto mt-0.5" />}
+                  {isActive && <Check className="w-3.5 h-3.5 text-[var(--accent)] ml-auto mt-0.5" />}
                 </button>
               );
             })}
@@ -227,6 +231,7 @@ export function Header({
 
         <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
+        <ThemePicker compact />
         <LanguagePicker compact />
 
         <button
@@ -266,7 +271,7 @@ export function Header({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-3 h-8 rounded bg-[#16181c] border border-white/[0.08] shadow-md text-xs text-neutral-300 pointer-events-none"
+          className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-3 h-8 rounded bg-[var(--panel)] border border-[var(--panel-border)] shadow-md text-xs text-neutral-300 pointer-events-none"
         >
           <Check className="w-3 h-3 text-neutral-500" />
           <span>{toastMessage}</span>
