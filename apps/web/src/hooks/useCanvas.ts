@@ -42,6 +42,7 @@ import { getLinkedFileHandle, type FileSaveState, type NativeFileSystemFileHandl
 import { layoutMindmapTree } from "../utils/mindmap.js";
 import { createId, createInitialScene } from "../utils/template.js";
 
+import { firstPageId, pageNodes } from "../utils/pageNodes.js";
 import { promoteTemplateDraft } from "../utils/boardLibrary.js";
 
 const DEFAULT_DOC_ID = "default-doc" as DocumentId;
@@ -326,7 +327,18 @@ export function useCanvas(
           }
         });
 
-        const initialParsedDoc = yDocToDocument(ydoc);
+        let initialParsedDoc = yDocToDocument(ydoc);
+        const unassigned = Object.values(initialParsedDoc.nodes).filter((node) => !node.pageId);
+        if (unassigned.length) {
+          const originalPage = firstPageId(initialParsedDoc);
+          ydoc.transact(() => {
+            for (const node of unassigned) {
+              const source = node.type === "arrow" ? initialParsedDoc.nodes[node.data.sourceId] : undefined;
+              nodesMap.get(node.id)?.set("pageId", source?.pageId ?? originalPage);
+            }
+          }, TRANSACTION_ORIGINS.LOCAL_USER);
+          initialParsedDoc = yDocToDocument(ydoc);
+        }
         setDocState(initialParsedDoc);
 
         if (initialParsedDoc.pages && Object.keys(initialParsedDoc.pages).length > 0) {
@@ -357,6 +369,8 @@ export function useCanvas(
           setActivePageId("page-1");
         }
 
+        undoManager.clear();
+        updateUndoState();
         const linkedNodeId = new URLSearchParams(window.location.search).get("node") as NodeId | null;
         const linkedNode = linkedNodeId ? initialParsedDoc.nodes[linkedNodeId] : undefined;
         if (linkedNodeId && linkedNode) {
@@ -371,7 +385,8 @@ export function useCanvas(
         } else if (urlCamera) {
           setCamera(urlCamera);
         } else {
-          const allNodes = Object.values(initialParsedDoc.nodes).filter(
+          const openingPage = initialPageIdRef.current ?? initialParsedDoc.activePageId ?? firstPageId(initialParsedDoc);
+          const allNodes = Object.values(pageNodes(initialParsedDoc, openingPage)).filter(
             (node) => node.type !== "arrow",
           );
           if (allNodes.length > 0) {
@@ -417,6 +432,7 @@ export function useCanvas(
   useEffect(() => {
     if (initialPageId) {
       setActivePageId(initialPageId);
+      setSelectedNodeIds(new Set());
     }
   }, [initialPageId]);
 
@@ -963,7 +979,7 @@ export function useCanvas(
 
   const zoomToFit = useCallback(() => {
     if (!docState) return;
-    const allNodes = Object.values(docState.nodes).filter((node) => node.type !== "arrow");
+    const allNodes = Object.values(pageNodes(docState, activePageId)).filter((node) => node.type !== "arrow");
     if (allNodes.length === 0) return;
 
     const bounds = computeGroupBounds(allNodes);
@@ -973,7 +989,7 @@ export function useCanvas(
     if (!viewport) return;
     const viewportSize = { width: viewport.clientWidth, height: viewport.clientHeight };
     setCamera(zoomToBounds(bounds, viewportSize, 60, 0.2, 1.8));
-  }, [docState]);
+  }, [docState, activePageId]);
 
   const hasAutoFramedRef = useRef(false);
 
@@ -987,12 +1003,12 @@ export function useCanvas(
   useEffect(() => {
     if (isLoaded && docState && !hasAutoFramedRef.current && shouldAutoFrameRef.current) {
       hasAutoFramedRef.current = true;
-      const allNodes = Object.values(docState.nodes).filter((node) => node.type !== "arrow");
+      const allNodes = Object.values(pageNodes(docState, activePageId)).filter((node) => node.type !== "arrow");
       if (allNodes.length > 0) {
         zoomToFit();
       }
     }
-  }, [isLoaded, docState, zoomToFit]);
+  }, [isLoaded, docState, activePageId, zoomToFit]);
 
   const createMindmapChild = useCallback(
     (parentId: NodeId) => {
@@ -1000,11 +1016,13 @@ export function useCanvas(
       if (!docState || !ydoc) return;
       const parent = docState.nodes[parentId];
       if (!parent) return;
+      const parentPage = parent.pageId ?? firstPageId(docState);
 
       const childId = createId("node");
       const timestamp = Date.now();
       const childNode: CanvasNode = {
         id: childId,
+        pageId: parentPage,
         type: "rectangle",
         x: parent.x + parent.width + 120,
         y: parent.y,
@@ -1036,6 +1054,7 @@ export function useCanvas(
       const arrowId = createId("arrow");
       const arrowNode: ArrowNode = {
         id: arrowId,
+        pageId: parentPage,
         type: "arrow",
         x: 0,
         y: 0,
@@ -1065,7 +1084,7 @@ export function useCanvas(
       const simulatedDoc: CanvasDocument = {
         ...docState,
         nodes: {
-          ...docState.nodes,
+          ...pageNodes(docState, parentPage),
           [childId]: childNode,
           [arrowId]: arrowNode,
         },
@@ -1398,10 +1417,11 @@ export function useCanvas(
     };
   }, [ingestImageFile]);
 
+  const displayedDocument = useMemo(() => docState ? { ...docState, activePageId } : null, [docState, activePageId]);
   return {
     importImage: ingestImageFile,
     viewportRef,
-    document: docState,
+    document: displayedDocument,
     camera,
     adapter: adapterState,
     selectedNodeIds,

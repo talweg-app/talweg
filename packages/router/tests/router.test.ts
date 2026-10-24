@@ -690,3 +690,22 @@ describe("renderOrthogonalEdge", () => {
     expect(edge.endMarkerSvg).toBeUndefined();
   });
 });
+
+describe("ports inside a curved shape's bounding box", () => {
+  it("extends horizontal exit stubs beyond the bounding box before routing", () => {
+    const points = routeOrthogonal(box(0, 0, 100, 100), box(300, 0, 100, 100), { ...EAST, point: { x: 1, y: .25 }, offset: { x: -30, y: 0 } }, { ...WEST, point: { x: 0, y: .75 }, offset: { x: 30, y: 0 } });
+    expect(points[0]).toEqual({ x: 70, y: 25 });
+    expect(points.at(-1)).toEqual({ x: 330, y: 75 });
+    expect(points[1]?.x).toBeGreaterThan(100);
+    expect(points.at(-2)?.x).toBeLessThan(300);
+    expectOrthogonal(points);
+  });
+  it("extends vertical exit stubs beyond the bounding box before routing", () => {
+    const points = routeOrthogonal(box(0, 0, 100, 100), box(0, 300, 100, 100), { ...SOUTH, point: { x: .25, y: 1 }, offset: { x: 0, y: -30 } }, { ...NORTH, point: { x: .75, y: 0 }, offset: { x: 0, y: 30 } });
+    expect(points[0]).toEqual({ x: 25, y: 70 });
+    expect(points.at(-1)).toEqual({ x: 75, y: 330 });
+    expect(points[1]?.y).toBeGreaterThan(100);
+    expect(points.at(-2)?.y).toBeLessThan(300);
+    expectOrthogonal(points);
+  });
+});

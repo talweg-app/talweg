@@ -129,23 +129,23 @@ export function drawNode(
       Math.PI * 2,
     );
   } else if (node.type === "diamond") {
-    ctx.moveTo(width / 2, 0);
-    ctx.lineTo(width, height / 2);
-    ctx.lineTo(width / 2, height);
-    ctx.lineTo(0, height / 2);
+    ctx.moveTo(width / 2, height * .02);
+    ctx.lineTo(width * .98, height / 2);
+    ctx.lineTo(width / 2, height * .98);
+    ctx.lineTo(width * .02, height / 2);
     ctx.closePath();
   } else if (node.type === "capsule") {
     ctx.roundRect(0, 0, width, height, Math.min(width, height) / 2);
   } else if (node.type === "cylinder") {
     const cap = height * 0.18;
-    ctx.moveTo(0, cap);
-    ctx.lineTo(0, height - cap);
-    ctx.ellipse(width / 2, height - cap, width / 2, cap, 0, Math.PI, 0, true);
-    ctx.lineTo(width, cap);
+    ctx.moveTo(width * .02, height * .2);
+    ctx.lineTo(width * .02, height * .8);
+    ctx.ellipse(width / 2, height * .8, width * .48, cap, 0, Math.PI, 0, true);
+    ctx.lineTo(width * .98, height * .2);
     ctx.closePath();
     surface();
     ctx.beginPath();
-    ctx.ellipse(width / 2, cap, width / 2, cap, 0, 0, Math.PI * 2);
+    ctx.ellipse(width / 2, height * .2, width * .48, cap, 0, 0, Math.PI * 2);
   } else {
     ctx.roundRect(0, 0, width, height, radius);
   }

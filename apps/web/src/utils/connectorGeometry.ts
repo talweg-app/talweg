@@ -20,6 +20,8 @@ import {
 } from "@talweg/router";
 import type { ArrowEndpoint } from "../types.js";
 
+import { shapeAnchor } from "./shapeAnchors.js";
+
 const FACE_BY_DIRECTION: Record<Direction, CompassFace> = {
   NORTH: "n",
   SOUTH: "s",
@@ -243,10 +245,8 @@ export function computeConnectorGeometry(
   const resolved = resolveArrow(arrow, document);
   if (!resolved) return null;
 
-  const sourceAnchor =
-    portSlots.get(portKey(arrow.id, "source")) ?? resolved.sourceAnchor;
-  const targetAnchor =
-    portSlots.get(portKey(arrow.id, "target")) ?? resolved.targetAnchor;
+  const sourceAnchor = shapeAnchor(resolved.sourceNode, portSlots.get(portKey(arrow.id, "source")) ?? resolved.sourceAnchor);
+  const targetAnchor = shapeAnchor(resolved.targetNode, portSlots.get(portKey(arrow.id, "target")) ?? resolved.targetAnchor);
   const sourcePoint = getAnchorPoint(resolved.sourceBox, sourceAnchor);
   const targetPoint = getAnchorPoint(resolved.targetBox, targetAnchor);
   const midpoint: Point2D = {

@@ -33,6 +33,7 @@ import { createId } from "../utils/template.js";
 import { readableTextColor } from "../utils/textRuns.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { useCanvasGestures } from "../hooks/useCanvasGestures.js";
+import { pageNodes } from "../utils/pageNodes.js";
 import { resizeNodeContent } from "../utils/resizeNodeContent.js";
 import { createCanvasNode } from "../utils/createCanvasNode.js";
 import { ArrowSelectionOverlay } from "./ArrowSelectionOverlay.js";
@@ -168,6 +169,14 @@ export function Canvas({
   const [resizeOffsets, setResizeOffsets] = useState<{ id: NodeId; box: TransformBox2D } | null>(null);
 
   useCanvasGestures(containerRef, onCameraChange);
+  useEffect(() => {
+    setConnectingSourceId(null);
+    setConnectingSourceAnchor(null);
+    setContextMenu(null);
+    setDragState(null);
+    setDragOffsets(new Map());
+    setResizeOffsets(null);
+  }, [activePageId]);
 
   // Spacebar tracking for Pan mode
   useEffect(() => {
@@ -431,9 +440,8 @@ export function Canvas({
       if (marqueeBounds.width > 3 || marqueeBounds.height > 3) {
         const nextSelected = new Set<NodeId>(e.shiftKey ? selectedNodeIds : []);
         if (document) {
-          for (const node of Object.values(document.nodes)) {
+          for (const node of Object.values(pageNodes(document, activePageId))) {
             if (node.type === "arrow") continue;
-            if (activePageId && node.pageId && node.pageId !== activePageId) continue;
             const nodeBounds = computeGroupBounds([node]);
             if (aabbIntersects(marqueeBounds, nodeBounds)) {
               nextSelected.add(node.id);
@@ -581,12 +589,7 @@ export function Canvas({
   // Merge live drag and resize positions into scene for instant reactive rendering, filtered by activePageId
   const renderedDocument: CanvasDocument | null = useMemo(() => {
     if (!document) return null;
-    const modifiedNodes: Record<NodeId, CanvasNode> = {};
-    for (const [id, node] of Object.entries(document.nodes)) {
-      if (!activePageId || !node.pageId || node.pageId === activePageId) {
-        modifiedNodes[id as NodeId] = node;
-      }
-    }
+    const modifiedNodes = pageNodes(document, activePageId);
 
     if (dragOffsets.size > 0) {
       for (const [id, pos] of dragOffsets.entries()) {

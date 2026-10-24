@@ -18,6 +18,8 @@ import {
 
 import { useTranslation } from "../hooks/useTranslation.js";
 
+import { shapeAnchor } from "../utils/shapeAnchors.js";
+
 const PORT_HIT_RADIUS = 30;
 const COMPASS_FACES: readonly CompassAnchor[] = ["n", "s", "e", "w"];
 
@@ -63,7 +65,7 @@ function findNearestPort(
     const box = nodeToBoundingBox(node);
 
     for (const face of COMPASS_FACES) {
-      const portPoint = getAnchorPoint(box, anchorForFace(face));
+      const portPoint = getAnchorPoint(box, shapeAnchor(node, anchorForFace(face)));
       const distance = Math.hypot(portPoint.x - point.x, portPoint.y - point.y);
 
       if (distance <= nearestDistance) {

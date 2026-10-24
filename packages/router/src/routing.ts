@@ -122,6 +122,14 @@ function coordinateAt(values: readonly number[], index: number): number {
   return values[index]!;
 }
 
+function outwardStub(point: Point2D, rect: BoundingBox, direction: Point2D, buffer: number): Point2D {
+  // curved silhouettes can place a port inside the bounding rectangle
+  return {
+    x: point.x + direction.x * (buffer + Math.max(0, rect.width / 2 - (point.x - (rect.minX + rect.width / 2)) * direction.x)),
+    y: point.y + direction.y * (buffer + Math.max(0, rect.height / 2 - (point.y - (rect.minY + rect.height / 2)) * direction.y)),
+  };
+}
+
 export function routeOrthogonal(
   source: BoundingBox,
   target: BoundingBox,
@@ -138,14 +146,8 @@ export function routeOrthogonal(
   const startDirection = getDirectionVector(sourceAnchor.direction);
   const endDirection = getDirectionVector(targetAnchor.direction);
 
-  const startStub: Point2D = {
-    x: start.x + startDirection.x * buffer,
-    y: start.y + startDirection.y * buffer,
-  };
-  const endStub: Point2D = {
-    x: end.x + endDirection.x * buffer,
-    y: end.y + endDirection.y * buffer,
-  };
+  const startStub = outwardStub(start, source, startDirection, buffer);
+  const endStub = outwardStub(end, target, endDirection, buffer);
 
   const searchMinX = Math.min(source.minX, target.minX) - OBSTACLE_SEARCH_MARGIN;
   const searchMinY = Math.min(source.minY, target.minY) - OBSTACLE_SEARCH_MARGIN;

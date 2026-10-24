@@ -9,6 +9,7 @@ import {
   buildPortSlotMap,
   computeConnectorGeometry,
 } from "./connectorGeometry.js";
+import { firstPageId, pageNodes } from "./pageNodes.js";
 import { drawNode } from "./drawNode.js";
 
 export async function exportToPng(
@@ -16,13 +17,7 @@ export async function exportToPng(
   filename = "talweg-canvas.png",
   adapter?: StorageAdapter | null,
 ): Promise<void> {
-  const visibleNodes = Object.values(document.nodes).filter(
-    (node) =>
-      node.isVisible &&
-      (!document.activePageId ||
-        !node.pageId ||
-        node.pageId === document.activePageId),
-  );
+  const visibleNodes = Object.values(pageNodes(document, document.activePageId ?? firstPageId(document))).filter((node) => node.isVisible);
   const nodes = visibleNodes.filter((node) => node.type !== "arrow");
   if (nodes.length === 0) return;
 
