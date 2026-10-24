@@ -32,18 +32,16 @@ export function ConnectorRenderer({
 
   if (!renderedData) return null;
 
-  const strokeColor = isSelected
-    ? "#f59e0b"
-    : arrow.data.curveStyle === "bezier"
-      ? "#818cf8"
-      : (arrow.style.strokeColor ?? "#64748b");
-  const strokeWidth = isSelected ? 2 : (arrow.style.strokeWidth ?? 1.5);
+  const strokeColor = arrow.style.strokeColor ?? "#64748b";
+  const strokeWidth = arrow.style.strokeDash === "none" ? 0 : (arrow.style.strokeWidth ?? 1.5);
 
   return (
     <g
+      data-node-id={arrow.id}
       className="cursor-pointer group"
       onPointerDown={(e) => {
         e.stopPropagation();
+        if (e.button !== 0) return;
         onSelect(arrow.id, e);
       }}
     >
@@ -62,6 +60,8 @@ export function ConnectorRenderer({
         }}
       />
 
+      {isSelected && <path d={renderedData.lineSvgPath} fill="none" stroke="#e9dda7" strokeOpacity={0.25} strokeWidth={strokeWidth + 6} className="pointer-events-none" />}
+
       {/* Main vector line */}
       <path
         d={renderedData.lineSvgPath}
@@ -79,7 +79,7 @@ export function ConnectorRenderer({
       />
 
       {/* End dot for Bezier branch connections */}
-      {renderedData.isBezier && (
+      {strokeWidth > 0 && renderedData.isBezier && (
         <circle
           cx={renderedData.targetPoint.x}
           cy={renderedData.targetPoint.y}
@@ -90,7 +90,7 @@ export function ConnectorRenderer({
       )}
 
       {/* Orthogonal Markers */}
-      {renderedData.startMarkerSvg && (
+      {strokeWidth > 0 && renderedData.startMarkerSvg && (
         <path
           d={renderedData.startMarkerSvg}
           fill={strokeColor}
@@ -98,7 +98,7 @@ export function ConnectorRenderer({
         />
       )}
 
-      {renderedData.endMarkerSvg && (
+      {strokeWidth > 0 && renderedData.endMarkerSvg && (
         <path
           d={renderedData.endMarkerSvg}
           fill={strokeColor}
@@ -126,7 +126,7 @@ export function ConnectorRenderer({
             x={0}
             y={3}
             textAnchor="middle"
-            fill="#a1a1aa"
+            fill={arrow.style.textColor ?? "#a1a1aa"}
             fontSize={10}
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
             fontWeight={500}

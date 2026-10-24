@@ -24,6 +24,10 @@ export type CanvasMode = "whiteboard" | "diagrams" | "mindmap";
 export type ArrowEndpoint = "source" | "target";
 
 export type ToolType =
+  | "ellipse"
+  | "text"
+  | "table"
+  | "checklist"
   | "select"
   | "pan"
   | "rectangle"

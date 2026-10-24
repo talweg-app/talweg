@@ -44,7 +44,6 @@ import { layoutMindmapTree } from "../utils/mindmap.js";
 import { createId, createInitialScene } from "../utils/template.js";
 
 const DEFAULT_DOC_ID = "default-doc" as DocumentId;
-const DEBOUNCE_MS = 100;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 10000;
 const BACKOFF_FACTOR = 1.5;
@@ -126,7 +125,6 @@ export function useCanvas(
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const clockRef = useRef(0);
   const pendingDeltasRef = useRef<StorageDelta[]>([]);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
@@ -167,30 +165,18 @@ export function useCanvas(
   }, []);
 
   const flushDeltas = useCallback(async () => {
-    if (saveTimeoutRef.current !== null) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-
     const deltas = pendingDeltasRef.current;
-    if (deltas.length === 0 || !adapterRef.current) return;
+    const adapter = adapterRef.current;
+    if (deltas.length === 0 || !adapter) return;
 
     pendingDeltasRef.current = [];
     try {
-      await adapterRef.current.saveDeltas(deltas);
-    } catch {
-      // Keep silent on background oplog flush failures
+      await adapter.saveDeltas(deltas);
+    } catch (error) {
+      if (adapterRef.current === adapter) pendingDeltasRef.current.unshift(...deltas);
+      console.error("[Talweg] Could not save canvas changes:", error);
     }
   }, []);
-
-  const scheduleFlush = useCallback(() => {
-    if (saveTimeoutRef.current !== null) return;
-
-    saveTimeoutRef.current = setTimeout(() => {
-      saveTimeoutRef.current = null;
-      void flushDeltas();
-    }, DEBOUNCE_MS);
-  }, [flushDeltas]);
 
   useEffect(() => {
     setIsLoaded(false);
@@ -278,7 +264,7 @@ export function useCanvas(
           const currentDoc = yDocToDocument(ydoc);
           setDocState(currentDoc);
 
-          if (origin === TRANSACTION_ORIGINS.LOCAL_USER) {
+          if (origin === TRANSACTION_ORIGINS.LOCAL_USER || origin === undoManager) {
             clockRef.current += 1;
             pendingDeltasRef.current.push({
               documentId,
@@ -287,7 +273,8 @@ export function useCanvas(
               origin: TRANSACTION_ORIGINS.LOCAL_USER,
               timestamp: Date.now(),
             });
-            scheduleFlush();
+            // start the IndexedDB transaction before navigation can discard a timer
+            void flushDeltas();
 
             // Broadcast local edit update to WebSocket room
             if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -368,9 +355,10 @@ export function useCanvas(
       undoManagerRef.current?.destroy();
       ydocRef.current?.destroy();
       setAdapterState(null);
+      adapterRef.current = null;
       void adapter.close();
     };
-  }, [documentId, scheduleFlush, flushDeltas]);
+  }, [documentId, flushDeltas]);
 
   // tab navigation swaps the route page without remounting the board
   useEffect(() => {

@@ -87,7 +87,7 @@ function CanvasView({ documentId, pageId, onOpenDashboard }: CanvasViewProps) {
         }}
       />
 
-      <main className="flex-1 relative w-full h-[calc(100vh-2.5rem)] overflow-hidden">
+      <main className="flex-1 min-h-0 relative w-full overflow-hidden">
         <Canvas
           document={document}
           camera={camera}
@@ -136,6 +136,7 @@ function CanvasView({ documentId, pageId, onOpenDashboard }: CanvasViewProps) {
         />
 
         <Toolbar
+          onOpenInsert={() => window.dispatchEvent(new Event("talweg:insert"))}
           activeTool={activeTool}
           mode={mode}
           onSelectTool={setActiveTool}

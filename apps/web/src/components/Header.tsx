@@ -118,16 +118,16 @@ export function Header({
   const ActiveModeIcon = MODES.find((m) => m.id === mode)?.icon ?? StickyNote;
 
   return (
-    <header className="h-9 border-b border-white/[0.08] bg-[#0e0f11] px-2 flex items-center justify-between z-30 select-none">
+    <header className="h-12 shrink-0 border-b border-white/[0.08] bg-[#191b1c] px-3 flex items-center justify-between z-30 select-none">
       <div className="flex items-center gap-1 min-w-0">
         <button
           type="button"
           onClick={onOpenDashboard}
-          className="flex items-center gap-1.5 h-7 px-1.5 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="flex items-center gap-1.5 h-8 px-1.5 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("dashboard.title")}
         >
           <img src="/favicon.svg" alt="" className="w-4 h-4" />
-          <span className="hidden sm:inline text-[11px] font-medium tracking-tight">Talweg</span>
+          <span className="hidden sm:inline text-sm font-semibold tracking-tight">Talweg</span>
         </button>
 
         <div className="h-4 w-px bg-white/[0.08]" />
@@ -137,7 +137,7 @@ export function Header({
           value={document?.name ?? ""}
           onChange={(e) => onUpdateTitle?.(e.target.value)}
           placeholder={t("canvas.titlePlaceholder")}
-          className="bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-[11px] text-neutral-300 focus:text-neutral-100 px-1.5 h-7 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
+          className="bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-xs text-neutral-300 focus:text-neutral-100 px-1.5 h-8 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
         />
       </div>
 
@@ -147,7 +147,7 @@ export function Header({
           onClick={() => {
             setModeMenuOpen((open) => !open);
           }}
-          className={`flex items-center gap-1.5 h-7 px-2 rounded text-[11px] transition cursor-pointer ${
+          className={`flex items-center gap-1.5 h-8 px-2 rounded text-xs transition cursor-pointer ${
             modeMenuOpen
               ? "bg-white/[0.07] text-neutral-100"
               : "text-neutral-300 hover:bg-white/[0.05] hover:text-neutral-100"
@@ -155,7 +155,7 @@ export function Header({
           aria-haspopup="menu"
           aria-expanded={modeMenuOpen}
         >
-          <ActiveModeIcon className="w-3.5 h-3.5 text-amber-400/90" />
+          <ActiveModeIcon className="w-3.5 h-3.5 text-[#e9dda7]" />
           <span>{t(`modes.${mode}`)}</span>
           <ChevronDown className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`} />
         </button>
@@ -164,7 +164,7 @@ export function Header({
           <div
             role="menu"
             data-testid="mode-picker-menu"
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[240px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none z-50 py-1"
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none z-50 py-1"
           >
             {MODES.map((candidate) => {
               const Icon = candidate.icon;
@@ -179,20 +179,20 @@ export function Header({
                     onModeChange(candidate.id);
                     setModeMenuOpen(false);
                   }}
-                  className={`w-full flex items-start gap-2.5 px-2.5 py-1.5 text-left transition cursor-pointer ${
+                  className={`w-full flex items-start gap-2.5 px-3 py-2 text-left transition cursor-pointer ${
                     isActive ? "bg-white/[0.05]" : "hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-amber-400/90" : "text-neutral-500"}`} />
+                  <Icon className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-[#e9dda7]" : "text-neutral-500"}`} />
                   <span className="flex flex-col gap-0.5">
-                    <span className={`text-[11px] ${isActive ? "text-neutral-100" : "text-neutral-300"}`}>
+                    <span className={`text-xs ${isActive ? "text-neutral-100" : "text-neutral-300"}`}>
                       {t(`modes.${candidate.id}`)}
                     </span>
                     <span className="text-[10px] text-neutral-500 leading-snug">
                       {t(`tooltips.mode${candidate.id.charAt(0).toUpperCase()}${candidate.id.slice(1)}`)}
                     </span>
                   </span>
-                  {isActive && <Check className="w-3.5 h-3.5 text-amber-400/90 ml-auto mt-0.5" />}
+                  {isActive && <Check className="w-3.5 h-3.5 text-[#e9dda7] ml-auto mt-0.5" />}
                 </button>
               );
             })}
@@ -204,7 +204,7 @@ export function Header({
         <button
           type="button"
           onClick={onResetZoom}
-          className="flex items-center justify-center h-7 min-w-[46px] px-1 rounded font-mono text-[11px] text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="flex items-center justify-center h-8 min-w-[52px] px-1 rounded font-mono text-xs text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("actions.resetZoom")}
           aria-label={t("actions.resetZoom")}
         >
@@ -216,7 +216,7 @@ export function Header({
         <button
           type="button"
           onClick={toggleLanguage}
-          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.langToggle")}
         >
           <Languages className="w-3.5 h-3.5" />
@@ -227,7 +227,7 @@ export function Header({
           onClick={() => {
             void handleShare();
           }}
-          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.share")}
         >
           <Share2 className="w-3.5 h-3.5" />
@@ -236,7 +236,7 @@ export function Header({
         <button
           type="button"
           onClick={handleSave}
-          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.save")}
         >
           <Save className="w-3.5 h-3.5" />
@@ -245,7 +245,7 @@ export function Header({
         <button
           type="button"
           onClick={handleExport}
-          className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+          className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.export")}
         >
           <Download className="w-3.5 h-3.5" />
@@ -256,7 +256,7 @@ export function Header({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-2.5 h-7 rounded bg-[#16181c] border border-white/[0.08] shadow-md text-[11px] text-neutral-300 pointer-events-none"
+          className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-3 h-8 rounded bg-[#16181c] border border-white/[0.08] shadow-md text-xs text-neutral-300 pointer-events-none"
         >
           <Check className="w-3 h-3 text-neutral-500" />
           <span>{toastMessage}</span>

@@ -6,10 +6,7 @@ import {
   type CanvasDocument,
   type CanvasNode,
   type CanvasPage,
-  type CapsuleNode,
   type CompassAnchor,
-  type CylinderNode,
-  type DiamondNode,
   type NodeId,
   type PageId,
   type Point2D,
@@ -33,6 +30,7 @@ import type {
 } from "../types.js";
 import { buildPortSlotMap } from "../utils/connectorGeometry.js";
 import { createId } from "../utils/template.js";
+import { createCanvasNode } from "../utils/createCanvasNode.js";
 import { ArrowSelectionOverlay } from "./ArrowSelectionOverlay.js";
 import { ConnectorRenderer } from "./ConnectorRenderer.js";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu.js";
@@ -95,7 +93,8 @@ function aabbIntersects(a: BoundingBox, b: BoundingBox): boolean {
   );
 }
 
-const snap16 = (val: number): number => Math.round(val / 16) * 16;
+const snap16 = (value: number): number => Math.round(value / 16) * 16;
+
 const EMPTY_PORT_SLOTS: ReadonlyMap<string, Anchor> = new Map();
 
 export function Canvas({
@@ -164,6 +163,7 @@ export function Canvas({
     };
 
     const handleWheel = (e: WheelEvent) => {
+      if (e.target instanceof Element && e.target.closest("[data-testid=canvas-context-menu]")) return;
       e.preventDefault();
 
       const deltaFactor = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1;
@@ -289,210 +289,32 @@ export function Canvas({
     [camera, getScreenBounds],
   );
 
+  useEffect(() => {
+    const openInsert = () => {
+      const bounds = containerRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      onSelectNodeIds(new Set());
+      setContextMenu({ clientPoint: { x, y }, worldPoint: toWorld(x, y), nodeId: null });
+    };
+    window.addEventListener("talweg:insert", openInsert);
+    return () => { window.removeEventListener("talweg:insert", openInsert); };
+  }, [onSelectNodeIds, toWorld]);
+
   const createNodeAt = useCallback(
     (tool: ToolType, worldPoint: Point2D): boolean => {
-      const spawnX = mode === "diagrams" ? snap16(worldPoint.x) : Math.round(worldPoint.x);
-      const spawnY = mode === "diagrams" ? snap16(worldPoint.y) : Math.round(worldPoint.y);
-      const timestamp = Date.now();
-
-      if (tool === "rectangle") {
-        const rectId = createId("rect");
-        const node: CanvasNode = {
-          id: rectId,
-          type: "rectangle",
-          x: spawnX - 100,
-          y: spawnY - 40,
-          width: 200,
-          height: 80,
-          rotation: 0,
-          zIndex: 10,
-          opacity: 1,
-          parentId: null,
-          isLocked: false,
-          isVisible: true,
-          style: {
-            fillColor: "#0f141c",
-            strokeColor: "#27272a",
-            strokeWidth: 1,
-            cornerRadius: 6,
-            textColor: "#f4f4f5",
-            fontSize: 13,
-            textAlign: "center",
-            verticalAlign: "middle",
-          },
-          data: { label: "Process" },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        onAddNode(node);
-        return true;
-      }
-
-      if (tool === "diamond") {
-        const diamondId = createId("diamond");
-        const node: DiamondNode = {
-          id: diamondId,
-          type: "diamond",
-          x: spawnX - 70,
-          y: spawnY - 48,
-          width: 140,
-          height: 96,
-          rotation: 0,
-          zIndex: 10,
-          opacity: 1,
-          parentId: null,
-          isLocked: false,
-          isVisible: true,
-          style: {
-            fillColor: "#0f172a",
-            strokeColor: "#38bdf8",
-            strokeWidth: 1.5,
-            textColor: "#f4f4f5",
-            fontSize: 12,
-          },
-          data: { label: "Decision" },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        onAddNode(node);
-        return true;
-      }
-
-      if (tool === "capsule") {
-        const capsuleId = createId("capsule");
-        const node: CapsuleNode = {
-          id: capsuleId,
-          type: "capsule",
-          x: spawnX - 72,
-          y: spawnY - 24,
-          width: 144,
-          height: 48,
-          rotation: 0,
-          zIndex: 10,
-          opacity: 1,
-          parentId: null,
-          isLocked: false,
-          isVisible: true,
-          style: {
-            fillColor: "#062b1e",
-            strokeColor: "#10b981",
-            strokeWidth: 1.5,
-            textColor: "#a7f3d0",
-            fontSize: 12,
-          },
-          data: { label: "Start / End" },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        onAddNode(node);
-        return true;
-      }
-
-      if (tool === "cylinder") {
-        const cylinderId = createId("cylinder");
-        const node: CylinderNode = {
-          id: cylinderId,
-          type: "cylinder",
-          x: spawnX - 72,
-          y: spawnY - 48,
-          width: 144,
-          height: 96,
-          rotation: 0,
-          zIndex: 10,
-          opacity: 1,
-          parentId: null,
-          isLocked: false,
-          isVisible: true,
-          style: {
-            fillColor: "#181126",
-            strokeColor: "#a855f7",
-            strokeWidth: 1.5,
-            textColor: "#e9d5ff",
-            fontSize: 12,
-          },
-          data: { label: "Data Store" },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        onAddNode(node);
-        return true;
-      }
-
-      if (tool === "sticker") {
-        const stickerId = createId("sticker");
-        const node: CanvasNode = {
-          id: stickerId,
-          type: "sticker",
-          x: spawnX - 110,
-          y: spawnY - 100,
-          width: 220,
-          height: 200,
-          rotation: 0,
-          zIndex: 10,
-          opacity: 1,
-          parentId: null,
-          isLocked: false,
-          isVisible: true,
-          style: {
-            fillColor: "#fef9c3",
-            textColor: "#422006",
-            fontSize: 14,
-            fontFamily: "sans-serif",
-            cornerRadius: 4,
-          },
-          data: {
-            content: "New note...",
-            stickerShape: "square",
-          },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        onAddNode(node);
-        return true;
-      }
-
-      if (tool === "card") {
-        const cardId = createId("card");
-        const node: CanvasNode = {
-          id: cardId,
-          type: "card",
-          x: spawnX - 170,
-          y: spawnY - 90,
-          width: 340,
-          height: 180,
-          rotation: 0,
-          zIndex: 10,
-          opacity: 1,
-          parentId: null,
-          isLocked: false,
-          isVisible: true,
-          style: {
-            fillColor: "#171717",
-            strokeColor: "#262626",
-            strokeWidth: 1,
-            cornerRadius: 8,
-            textColor: "#f5f5f5",
-            fontSize: 13,
-          },
-          data: {
-            title: "New Card",
-            status: "todo",
-            tags: [],
-          },
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        onAddNode(node);
-        return true;
-      }
-
-      return false;
+      const node = createCanvasNode(tool, worldPoint, mode);
+      if (!node) return false;
+      onAddNode(node);
+      onSelectTool("select");
+      return true;
     },
-    [mode, onAddNode],
+    [mode, onAddNode, onSelectTool],
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || e.button === 2) return;
     try {
       containerRef.current.setPointerCapture(e.pointerId);
     } catch {
@@ -908,9 +730,10 @@ export function Canvas({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-[calc(100vh-2.5rem)] overflow-hidden overscroll-none bg-[#08090a] select-none touch-none ${cursorClass}`}
+      data-testid="canvas"
+      className={`relative w-full h-full overflow-hidden overscroll-none bg-[#101112] select-none touch-none ${cursorClass}`}
       style={{
-        backgroundImage: "radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(circle, rgba(255, 255, 255, 0.065) 1px, transparent 1px)",
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
         backgroundPosition: `${String(gridOffsetX)}px ${String(gridOffsetY)}px`,
       }}
@@ -919,7 +742,13 @@ export function Canvas({
       onPointerUp={handlePointerUp}
       onContextMenu={(e) => {
         e.preventDefault();
+        const target = e.target instanceof Element ? e.target.closest("[data-node-id]") : null;
+        const nodeId = target?.getAttribute("data-node-id") as NodeId | null;
+        if (nodeId && !selectedNodeIds.has(nodeId)) onSelectNodeIds(new Set([nodeId]));
+        if (!nodeId) onSelectNodeIds(new Set());
+        setDragState(null);
         setContextMenu({
+          nodeId,
           clientPoint: { x: e.clientX, y: e.clientY },
           worldPoint: toWorld(e.clientX, e.clientY),
         });
@@ -969,7 +798,6 @@ export function Canvas({
                   isPanActive={isSpacePressed || activeTool === "pan"}
                   onSelect={handleNodeSelect}
                   onUpdateData={onUpdateNodeData}
-                  onUpdateStyle={onUpdateNodeStyle}
                   onStartConnect={(sourceId, anchor) => {
                     setConnectingSourceId(sourceId);
                     setConnectingSourceAnchor(anchor ?? "e");
@@ -1024,7 +852,7 @@ export function Canvas({
 
       {/* Floating Status Badge when Connecting Nodes */}
       {connectingSourceId && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#16181c] border border-white/[0.08] text-neutral-300 px-2.5 h-7 flex items-center rounded text-[11px] shadow-md pointer-events-none">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#16181c] border border-white/[0.08] text-neutral-300 px-3 h-8 flex items-center rounded text-xs shadow-md pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400/90 mr-1.5" />
           <span>Click target node to connect</span>
         </div>
@@ -1034,7 +862,29 @@ export function Canvas({
         <ContextMenu
           state={contextMenu}
           mode={mode}
-          hasSelection={selectedNodeIds.size > 0}
+          nodes={contextMenu.nodeId && document
+            ? [...selectedNodeIds].map((id) => document.nodes[id]).filter((node): node is CanvasNode => !!node)
+            : []}
+          onUpdateStyle={(style) => {
+            for (const id of selectedNodeIds) onUpdateNodeStyle(id, { ...style });
+          }}
+          onDuplicate={() => {
+            if (!document) return;
+            const copies = [...selectedNodeIds].flatMap((id) => {
+              const node = document.nodes[id];
+              if (!node || node.type === "arrow") return [];
+              const timestamp = Date.now();
+              return [{ ...structuredClone(node), id: createId(node.type), x: node.x + 24, y: node.y + 24, createdAt: timestamp, updatedAt: timestamp }];
+            });
+            copies.forEach(onAddNode);
+            onSelectNodeIds(new Set(copies.map((node) => node.id)));
+          }}
+          onArrange={(front) => {
+            if (!document || !onUpdateNode) return;
+            const layers = Object.values(document.nodes).map((node) => node.zIndex);
+            const layer = front ? Math.max(...layers, 0) + 1 : Math.min(...layers, 0) - 1;
+            for (const id of selectedNodeIds) onUpdateNode(id, { zIndex: layer });
+          }}
           onClose={() => {
             setContextMenu(null);
           }}

@@ -5,6 +5,8 @@ import {
   Diamond,
   GitBranch,
   Hand,
+  Plus,
+  Type,
   MousePointer2,
   Pill,
   Redo2,
@@ -21,6 +23,7 @@ interface ToolbarProps {
   activeTool: ToolType;
   mode: CanvasMode;
   onSelectTool: (tool: ToolType) => void;
+  onOpenInsert: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -59,9 +62,9 @@ function ToolbarButton({
       aria-label={label}
       aria-pressed={active}
       title={tooltip}
-      className={`group relative flex items-center justify-center w-7 h-7 rounded transition ${
+      className={`group relative flex items-center justify-center w-9 h-9 rounded-md transition ${
         active
-          ? "bg-white/[0.09] text-neutral-50"
+          ? "bg-[#e9dda7] text-[#202223]"
           : disabled
             ? "text-neutral-600 cursor-default"
             : danger
@@ -79,6 +82,7 @@ export function Toolbar({
   activeTool,
   mode,
   onSelectTool,
+  onOpenInsert,
   canUndo,
   canRedo,
   onUndo,
@@ -125,7 +129,7 @@ export function Toolbar({
   })();
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-px bg-[#131518] border border-white/[0.08] rounded shadow-md select-none">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 p-1 bg-[#202223] border border-[#3b3e3e] rounded-xl shadow-lg select-none">
       {tools.map((tool) => {
         const Icon = tool.icon;
         return (
@@ -155,6 +159,8 @@ export function Toolbar({
         </>
       )}
 
+      <ToolbarButton onClick={onOpenInsert} label={t("insert.title")} tooltip={t("insert.title")}><Plus className="w-4 h-4" /></ToolbarButton>
+      <ToolbarButton onClick={() => { onSelectTool("text"); }} label={t("tools.text")} tooltip={t("tools.text")} active={activeTool === "text"}><Type className="w-4 h-4" /></ToolbarButton>
       <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
       <ToolbarButton onClick={onUndo} disabled={!canUndo} label={t("actions.undo")} tooltip={t("tooltips.undo")}>

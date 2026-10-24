@@ -8,6 +8,8 @@ export type FractionalIndex = string;
 export type PageId = string;
 
 export type NodeType =
+  | "table"
+  | "checklist"
   | "rectangle"
   | "sticker"
   | "card"
@@ -226,7 +228,28 @@ export interface ImageNode extends CanvasNodeBase {
   readonly data: ImageNodeData;
 }
 
+export interface EllipseNode extends CanvasNodeBase {
+  readonly type: "ellipse";
+  data?: { label?: string };
+}
+
+export interface TableNode extends CanvasNodeBase {
+  readonly type: "table";
+  data: { cells: string[][] };
+}
+
+export interface ChecklistNode extends CanvasNodeBase {
+  readonly type: "checklist";
+  data: {
+    title: string;
+    items: { id: string; text: string; checked: boolean }[];
+  };
+}
+
 export type CanvasNode =
+  | EllipseNode
+  | TableNode
+  | ChecklistNode
   | RectangleNode
   | StickerNode
   | CardNode

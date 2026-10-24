@@ -30,7 +30,7 @@ export function ZoomControls({
       <button
         type="button"
         onClick={onZoomOut}
-        className="flex items-center justify-center w-7 h-7 rounded-l text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+        className="flex items-center justify-center w-8 h-8 rounded-l text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
         title={t("actions.zoomOut")}
         aria-label={t("actions.zoomOut")}
       >
@@ -40,7 +40,7 @@ export function ZoomControls({
       <button
         type="button"
         onClick={onResetZoom}
-        className="flex items-center justify-center h-7 min-w-[46px] px-1 font-mono text-[11px] text-neutral-300 hover:text-white hover:bg-white/[0.05] border-x border-white/[0.08] transition cursor-pointer"
+        className="flex items-center justify-center h-8 min-w-[52px] px-1 font-mono text-xs text-neutral-300 hover:text-white hover:bg-white/[0.05] border-x border-white/[0.08] transition cursor-pointer"
         title={t("actions.resetZoom")}
       >
         {percentage}%
@@ -49,7 +49,7 @@ export function ZoomControls({
       <button
         type="button"
         onClick={onZoomIn}
-        className="flex items-center justify-center w-7 h-7 text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+        className="flex items-center justify-center w-8 h-8 text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
         title={t("actions.zoomIn")}
         aria-label={t("actions.zoomIn")}
       >
@@ -61,7 +61,7 @@ export function ZoomControls({
       <button
         type="button"
         onClick={onZoomToFit}
-        className="flex items-center justify-center w-7 h-7 rounded-r text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+        className="flex items-center justify-center w-8 h-8 rounded-r text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
         title={t("actions.zoomToFit")}
         aria-label={t("actions.zoomToFit")}
       >

@@ -5,3 +5,5 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 .infoslop
+test-results/
+playwright-report/

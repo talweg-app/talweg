@@ -78,7 +78,7 @@ export function PageTabsBar({
           return (
             <div
               key={page.id}
-              className={`group relative flex items-center gap-1 h-7 px-2.5 text-[11px] transition cursor-pointer ${
+              className={`group relative flex items-center gap-1 h-8 px-3 text-xs transition cursor-pointer ${
                 index > 0 ? "border-l border-white/[0.06]" : ""
               } ${
                 isActive
@@ -110,7 +110,7 @@ export function PageTabsBar({
                       setEditingPageId(null);
                     }
                   }}
-                  className="bg-[#0b0c0e] text-neutral-100 px-1 py-0.5 rounded border border-white/[0.15] outline-none w-20 text-[11px]"
+                  className="bg-[#0b0c0e] text-neutral-100 px-1 py-0.5 rounded border border-white/[0.15] outline-none w-24 text-xs"
                   onClick={(e) => {
                     e.stopPropagation();
                   }}
@@ -148,7 +148,7 @@ export function PageTabsBar({
             navigate(buildPagePath(boardId, newId));
           }
         }}
-        className="flex items-center justify-center w-7 h-7 border-l border-white/[0.06] text-neutral-500 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+        className="flex items-center justify-center w-8 h-8 border-l border-white/[0.06] text-neutral-500 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
       >
         <Plus className="w-3.5 h-3.5" />
       </button>

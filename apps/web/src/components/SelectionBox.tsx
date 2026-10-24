@@ -56,6 +56,7 @@ export function SelectionBox({ node, camera, onResizeStart }: SelectionBoxProps)
 
   return (
     <div
+      data-node-id={node.id}
       style={{
         transform: `translate3d(${String(node.x)}px, ${String(node.y)}px, 0px) rotate(${String(node.rotation)}deg)`,
         width: node.width,
@@ -88,6 +89,7 @@ export function SelectionBox({ node, camera, onResizeStart }: SelectionBoxProps)
             }}
             onPointerDown={(e) => {
               e.stopPropagation();
+              if (e.button !== 0) return;
               onResizeStart(e, handle, node);
             }}
           />

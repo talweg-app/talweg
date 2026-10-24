@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ArrowUpRight,
+  ArrowDownToLine,
+  ArrowUpToLine,
+  CheckSquare,
+  Circle,
+  Copy,
   CornerDownRight,
   CreditCard,
   Database,
@@ -8,33 +12,34 @@ import {
   GitBranch,
   Maximize2,
   Pill,
+  Search,
   Square,
   StickyNote,
+  Table2,
   Trash2,
-  ZoomIn,
-  ZoomOut,
+  Type,
+  X,
 } from "lucide-react";
+import type { CanvasNode, NodeStyle } from "@talweg/core";
 import { useTranslation } from "../hooks/useTranslation.js";
 import type { CanvasMode, Point2D, ToolType } from "../types.js";
+import { NodeStylePanel } from "./NodeStylePanel.js";
 
 export interface ContextMenuState {
   clientPoint: Point2D;
   worldPoint: Point2D;
-}
-
-interface MenuEntry {
-  readonly id: string;
-  readonly label: string;
-  readonly icon: typeof Square;
-  readonly onSelect: () => void;
+  nodeId: string | null;
 }
 
 interface ContextMenuProps {
   state: ContextMenuState;
   mode: CanvasMode;
-  hasSelection: boolean;
+  nodes: readonly CanvasNode[];
   onClose: () => void;
   onCreateNode: (tool: ToolType) => void;
+  onUpdateStyle: (style: NodeStyle) => void;
+  onDuplicate: () => void;
+  onArrange: (front: boolean) => void;
   onDeleteSelected?: (() => void) | undefined;
   onAddMindmapChild?: (() => void) | undefined;
   onAddMindmapSibling?: (() => void) | undefined;
@@ -44,155 +49,242 @@ interface ContextMenuProps {
   onResetZoom: () => void;
 }
 
+const ELEMENTS: readonly {
+  tool: ToolType;
+  icon: typeof Square;
+  group: "content" | "shapes";
+}[] = [
+  { tool: "sticker", icon: StickyNote, group: "content" },
+  { tool: "text", icon: Type, group: "content" },
+  { tool: "card", icon: CreditCard, group: "content" },
+  { tool: "checklist", icon: CheckSquare, group: "content" },
+  { tool: "table", icon: Table2, group: "content" },
+  { tool: "rectangle", icon: Square, group: "shapes" },
+  { tool: "ellipse", icon: Circle, group: "shapes" },
+  { tool: "diamond", icon: Diamond, group: "shapes" },
+  { tool: "capsule", icon: Pill, group: "shapes" },
+  { tool: "cylinder", icon: Database, group: "shapes" },
+];
+
 export function ContextMenu({
   state,
   mode,
-  hasSelection,
+  nodes,
   onClose,
   onCreateNode,
+  onUpdateStyle,
+  onDuplicate,
+  onArrange,
   onDeleteSelected,
   onAddMindmapChild,
   onAddMindmapSibling,
-  onZoomIn,
-  onZoomOut,
   onZoomToFit,
-  onResetZoom,
 }: ContextMenuProps) {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: state.clientPoint.x, top: state.clientPoint.y });
+  const [query, setQuery] = useState("");
+  const [pos, setPos] = useState({
+    left: state.clientPoint.x,
+    top: state.clientPoint.y,
+  });
+  const hasSelection = nodes.length > 0;
 
   useLayoutEffect(() => {
-    const el = menuRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
+    const rect = menuRef.current?.getBoundingClientRect();
+    if (!rect) return;
     setPos({
-      left: Math.max(8, Math.min(state.clientPoint.x, window.innerWidth - rect.width - 8)),
-      top: Math.max(8, Math.min(state.clientPoint.y, window.innerHeight - rect.height - 8)),
+      left: Math.max(
+        8,
+        Math.min(state.clientPoint.x, window.innerWidth - rect.width - 8),
+      ),
+      top: Math.max(
+        8,
+        Math.min(state.clientPoint.y, window.innerHeight - rect.height - 8),
+      ),
     });
-  }, [state.clientPoint.x, state.clientPoint.y]);
+  }, [state.clientPoint.x, state.clientPoint.y, hasSelection]);
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
-      // window-targeted events carry a non-Node target; contains() would throw
-      if (!(e.target instanceof Node) || !menuRef.current?.contains(e.target)) onClose();
+      if (!(e.target instanceof Node) || !menuRef.current?.contains(e.target))
+        onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (e.target instanceof Element && e.target.matches("input, textarea, select")) return;
+        const controls = Array.from(
+          menuRef.current?.querySelectorAll<HTMLButtonElement>(
+            "button:not(:disabled)",
+          ) ?? [],
+        );
+        const index = controls.indexOf(
+          window.document.activeElement as HTMLButtonElement,
+        );
+        controls[
+          (index + (e.key === "ArrowDown" ? 1 : -1) + controls.length) %
+            controls.length
+        ]?.focus();
+        e.preventDefault();
+      }
+    };
+    const handleWheel = (e: WheelEvent) => {
+      if (!(e.target instanceof Node) || !menuRef.current?.contains(e.target))
+        onClose();
     };
     window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("wheel", onClose, { passive: true });
-    window.addEventListener("blur", onClose);
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("resize", onClose);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("wheel", onClose);
-      window.removeEventListener("blur", onClose);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("resize", onClose);
     };
   }, [onClose]);
 
-  const addEntries: MenuEntry[] = (() => {
-    if (mode === "diagrams") {
-      return [
-        { id: "rectangle", label: t("tools.rectangle"), icon: Square, onSelect: () => { onCreateNode("rectangle"); } },
-        { id: "diamond", label: t("tools.diamond"), icon: Diamond, onSelect: () => { onCreateNode("diamond"); } },
-        { id: "capsule", label: t("tools.capsule"), icon: Pill, onSelect: () => { onCreateNode("capsule"); } },
-        { id: "cylinder", label: t("tools.cylinder"), icon: Database, onSelect: () => { onCreateNode("cylinder"); } },
-      ];
-    }
-    if (mode === "mindmap") {
-      return [
-        { id: "rectangle", label: t("contextMenu.topic"), icon: Square, onSelect: () => { onCreateNode("rectangle"); } },
-      ];
-    }
-    return [
-      { id: "sticker", label: t("tools.sticker"), icon: StickyNote, onSelect: () => { onCreateNode("sticker"); } },
-      { id: "card", label: t("tools.card"), icon: CreditCard, onSelect: () => { onCreateNode("card"); } },
-      { id: "rectangle", label: t("tools.rectangle"), icon: Square, onSelect: () => { onCreateNode("rectangle"); } },
-    ];
-  })();
-
-  const selectionEntries: MenuEntry[] = (() => {
-    const entries: MenuEntry[] = [];
-    if (hasSelection && mode === "mindmap") {
-      if (onAddMindmapChild) {
-        entries.push({
-          id: "child",
-          label: t("actions.addChild"),
-          icon: CornerDownRight,
-          onSelect: onAddMindmapChild,
-        });
-      }
-      if (onAddMindmapSibling) {
-        entries.push({
-          id: "sibling",
-          label: t("actions.addSibling"),
-          icon: GitBranch,
-          onSelect: onAddMindmapSibling,
-        });
-      }
-    }
-    if (hasSelection && onDeleteSelected) {
-      entries.push({
-        id: "delete",
-        label: t("tools.delete"),
-        icon: Trash2,
-        onSelect: onDeleteSelected,
-      });
-    }
-    return entries;
-  })();
-
-  const viewEntries: MenuEntry[] = [
-    { id: "zoomIn", label: t("actions.zoomIn"), icon: ZoomIn, onSelect: onZoomIn },
-    { id: "zoomOut", label: t("actions.zoomOut"), icon: ZoomOut, onSelect: onZoomOut },
-    { id: "fit", label: t("actions.zoomToFit"), icon: Maximize2, onSelect: onZoomToFit },
-    {
-      id: "reset",
-      label: t("actions.resetZoom"),
-      icon: ArrowUpRight,
-      onSelect: onResetZoom,
-    },
-  ];
-
-  const renderSection = (title: string, entries: MenuEntry[]) => (
-    <div className="py-1">
-      <div className="px-2.5 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-neutral-600 select-none">
-        {title}
-      </div>
-      {entries.map((entry) => (
-        <button
-          key={entry.id}
-          type="button"
-          onClick={() => {
-            entry.onSelect();
-            onClose();
-          }}
-          className="w-full flex items-center gap-2 px-2.5 py-1 rounded-[3px] mx-1 text-[11px] text-neutral-300 hover:text-white hover:bg-white/[0.05] transition cursor-pointer"
-        >
-          <entry.icon className="w-3.5 h-3.5 text-neutral-500" />
-          <span>{entry.label}</span>
-        </button>
-      ))}
-    </div>
+  const action = (
+    label: string,
+    Icon: typeof Square,
+    run: () => void,
+    danger = false,
+  ) => (
+    <button
+      type="button"
+      className={`context-action ${danger ? "context-danger" : ""}`}
+      onClick={() => {
+        run();
+        onClose();
+      }}
+    >
+      <Icon size={15} />
+      <span>{label}</span>
+    </button>
   );
 
   return (
     <div
       ref={menuRef}
       data-testid="canvas-context-menu"
-      role="menu"
+      role="dialog"
+      aria-label={t(hasSelection ? "inspector.title" : "insert.title")}
       onPointerDown={(e) => {
-        // canvas pointer capture retargets the click away from the item
+        e.stopPropagation();
+      }}
+      onWheel={(e) => {
+        e.stopPropagation();
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
         e.stopPropagation();
       }}
       style={{ left: pos.left, top: pos.top }}
-      className="fixed z-50 min-w-[172px] bg-[#16181c] border border-white/[0.08] rounded shadow-md select-none text-xs divide-y divide-white/[0.06]"
+      className="canvas-context-menu"
     >
-      {renderSection(t("contextMenu.add"), addEntries)}
-      {selectionEntries.length > 0 && renderSection(t("contextMenu.selection"), selectionEntries)}
-      {renderSection(t("contextMenu.view"), viewEntries)}
+      <div className="context-heading">
+        <span>{t(hasSelection ? "inspector.title" : "insert.title")}</span>
+        <span className="context-caption">
+          {hasSelection
+            ? nodes.length > 1
+              ? `${String(nodes.length)} ${t("inspector.selected")}`
+              : t(`tools.${nodes[0]?.type ?? "rectangle"}`)
+            : t("insert.atCursor")}
+        </span>
+        <button
+          type="button"
+          aria-label={t("inspector.close")}
+          onClick={onClose}
+        >
+          <X size={14} />
+        </button>
+      </div>
+      {hasSelection ? (
+        <>
+          <NodeStylePanel nodes={nodes} onUpdateStyle={onUpdateStyle} />
+          <div className="context-section context-actions">
+            {nodes.some((node) => node.type !== "arrow") &&
+              action(t("inspector.duplicate"), Copy, onDuplicate)}
+            <div className="context-action-pair">
+              {action(t("inspector.bringFront"), ArrowUpToLine, () => {
+                onArrange(true);
+              })}
+              {action(t("inspector.sendBack"), ArrowDownToLine, () => {
+                onArrange(false);
+              })}
+            </div>
+            {mode === "mindmap" &&
+              onAddMindmapChild &&
+              action(t("actions.addChild"), CornerDownRight, onAddMindmapChild)}
+            {mode === "mindmap" &&
+              onAddMindmapSibling &&
+              action(t("actions.addSibling"), GitBranch, onAddMindmapSibling)}
+            {onDeleteSelected &&
+              action(t("tools.delete"), Trash2, onDeleteSelected, true)}
+          </div>
+        </>
+      ) : (
+        <>
+          <label className="context-search">
+            <Search size={14} />
+            <input
+              autoFocus
+              placeholder={t("insert.search")}
+              aria-label={t("insert.search")}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+              }}
+            />
+          </label>
+          {(["content", "shapes"] as const).map((group) => {
+            const entries = ELEMENTS.filter(
+              (entry) =>
+                entry.group === group &&
+                t(`tools.${entry.tool}`)
+                  .toLocaleLowerCase()
+                  .includes(query.toLocaleLowerCase()),
+            );
+            return (
+              entries.length > 0 && (
+                <div key={group} className="context-section">
+                  <div className="context-section-label">
+                    {t(`insert.${group}`)}
+                  </div>
+                  <div className="insert-grid">
+                    {entries.map(({ tool, icon: Icon }) => (
+                      <button
+                        type="button"
+                        key={tool}
+                        onClick={() => {
+                          onCreateNode(tool);
+                          onClose();
+                        }}
+                      >
+                        <Icon size={19} strokeWidth={1.4} />
+                        <span>{t(`tools.${tool}`)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            );
+          })}
+          {!ELEMENTS.some((entry) =>
+            t(`tools.${entry.tool}`)
+              .toLocaleLowerCase()
+              .includes(query.toLocaleLowerCase()),
+          ) && <div className="context-empty">{t("insert.noResults")}</div>}
+          <div className="context-section">
+            {action(t("actions.zoomToFit"), Maximize2, onZoomToFit)}
+          </div>
+          <div className="context-footer">{t("insert.hint")}</div>
+        </>
+      )}
     </div>
   );
 }

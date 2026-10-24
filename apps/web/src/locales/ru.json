@@ -2,19 +2,23 @@
   "modes": {
     "whiteboard": "Доска",
     "diagrams": "Схемы",
-    "mindmap": "Планы"
+    "mindmap": "Карта мыслей"
   },
   "tools": {
     "select": "Выбор",
     "pan": "Рука",
     "rectangle": "Прямоугольник",
     "sticker": "Стикер",
-    "card": "Карточка",
+    "card": "Карточка задачи",
     "arrow": "Стрелка",
     "diamond": "Решение",
     "capsule": "Терминатор",
     "cylinder": "Данные",
-    "delete": "Удалить"
+    "delete": "Удалить",
+    "ellipse": "Овал",
+    "text": "Текст",
+    "table": "Таблица",
+    "checklist": "Чек-лист"
   },
   "actions": {
     "undo": "Отменить",
@@ -97,5 +101,50 @@
     "selection": "Выбор",
     "view": "Вид",
     "topic": "Тема"
+  },
+  "inspector": {
+    "title": "Оформление",
+    "selected": "выбрано",
+    "mixed": "Разные",
+    "none": "Нет",
+    "noFill": "Без заливки",
+    "fillColor": "Заливка",
+    "strokeColor": "Окантовка",
+    "textColor": "Текст",
+    "strokeWidth": "Толщина",
+    "strokeDash": "Линия",
+    "solid": "Сплошная",
+    "dashed": "Штриховая",
+    "dotted": "Пунктирная",
+    "fontSize": "Размер",
+    "bold": "Жирный текст",
+    "textAlign": "Выравнивание",
+    "left": "По левому краю",
+    "center": "По центру",
+    "right": "По правому краю",
+    "cornerRadius": "Скругление",
+    "close": "Закрыть",
+    "duplicate": "Дублировать",
+    "bringFront": "На передний план",
+    "sendBack": "На задний план"
+  },
+  "insert": {
+    "title": "Добавить на холст",
+    "atCursor": "В точке клика",
+    "search": "Найти элемент…",
+    "content": "Заметки и планы",
+    "shapes": "Фигуры",
+    "noResults": "Ничего не найдено",
+    "hint": "Двойной клик по фигуре — изменить текст",
+    "planTitle": "Название плана",
+    "complete": "Выполнено",
+    "task": "Задача",
+    "removeTask": "Удалить задачу",
+    "addTask": "Добавить задачу",
+    "cell": "Ячейка",
+    "column": "Столбец",
+    "row": "Строка",
+    "removeRow": "Удалить последнюю строку",
+    "removeColumn": "Удалить последний столбец"
   }
 }

@@ -192,10 +192,10 @@ export function WelcomeDashboard({
           : "fixed inset-0 z-50 bg-[#0b0c0e] flex flex-col overflow-y-auto antialiased select-none text-neutral-200"
       }
     >
-      <div className="h-9 border-b border-white/[0.08] bg-[#0e0f11] px-3 flex items-center justify-between shrink-0">
+      <div className="h-10 border-b border-white/[0.08] bg-[#0e0f11] px-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <img src="/favicon.svg" alt="" className="w-4 h-4" />
-          <h1 id="welcome-dashboard-title" className="text-[11px] font-medium tracking-tight text-neutral-200">
+          <h1 id="welcome-dashboard-title" className="text-sm font-medium tracking-tight text-neutral-200">
             {t("dashboard.title")}
           </h1>
         </div>
@@ -206,7 +206,7 @@ export function WelcomeDashboard({
             onClick={() => {
               void handleOpenFromFile();
             }}
-            className="flex items-center gap-1.5 h-7 px-2 rounded text-[11px] text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
+            className="flex items-center gap-1.5 h-8 px-2.5 rounded text-xs text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           >
             <FolderOpen className="w-3.5 h-3.5" />
             <span>{t("dashboard.openFromComputer")}</span>
@@ -217,7 +217,7 @@ export function WelcomeDashboard({
               ref={closeButtonRef}
               type="button"
               onClick={onClose}
-              className="flex items-center justify-center w-7 h-7 rounded text-neutral-400 hover:text-white hover:bg-white/[0.05] transition cursor-pointer"
+              className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-white hover:bg-white/[0.05] transition cursor-pointer"
               title={t("dashboard.close")}
               aria-label={t("dashboard.close")}
             >
@@ -227,7 +227,7 @@ export function WelcomeDashboard({
         </div>
       </div>
 
-      <div className="max-w-2xl w-full mx-auto flex flex-col px-6 py-10 gap-10">
+      <div className="max-w-3xl w-full mx-auto flex flex-col px-8 py-12 gap-12">
         <div>
           <h2 className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2">
             {t("dashboard.templates")}
@@ -240,20 +240,20 @@ export function WelcomeDashboard({
                   key={template.id}
                   type="button"
                   onClick={template.create}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left group transition cursor-pointer hover:bg-white/[0.03] ${
+                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left group transition cursor-pointer hover:bg-white/[0.03] ${
                     index > 0 ? "border-t border-white/[0.06]" : ""
                   }`}
                 >
                   <Icon className="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 transition shrink-0" />
                   <span className="flex flex-col min-w-0 flex-1">
-                    <span className="text-xs text-neutral-200 group-hover:text-white transition truncate">
+                    <span className="text-[13px] text-neutral-200 group-hover:text-white transition truncate">
                       {template.title}
                     </span>
-                    <span className="text-[11px] text-neutral-500 truncate">
+                    <span className="text-xs text-neutral-500 truncate">
                       {template.desc}
                     </span>
                   </span>
-                  <span className="text-[10px] text-neutral-600 shrink-0">{template.mode}</span>
+                  <span className="text-[11px] text-neutral-600 shrink-0">{template.mode}</span>
                 </button>
               );
             })}
@@ -266,11 +266,11 @@ export function WelcomeDashboard({
           </h2>
 
           {isLoading ? (
-            <div className="h-16 flex items-center justify-center text-[11px] text-neutral-500 border border-dashed border-white/[0.08] rounded">
+            <div className="h-16 flex items-center justify-center text-xs text-neutral-500 border border-dashed border-white/[0.08] rounded">
               …
             </div>
           ) : recentBoards.length === 0 ? (
-            <div className="border border-dashed border-white/[0.08] rounded px-3 py-6 text-center text-[11px] text-neutral-500">
+            <div className="border border-dashed border-white/[0.08] rounded px-3 py-8 text-center text-xs text-neutral-500">
               {t("dashboard.noRecent")}
             </div>
           ) : (
@@ -284,12 +284,12 @@ export function WelcomeDashboard({
                     onClick={() => {
                       onSelectBoard(snapshot.meta.documentId);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-left group transition cursor-pointer hover:bg-white/[0.03] ${
+                    className={`w-full flex items-center gap-3.5 px-4 py-3 text-left group transition cursor-pointer hover:bg-white/[0.03] ${
                       index > 0 ? "border-t border-white/[0.06]" : ""
                     }`}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? "bg-amber-400" : "bg-transparent"}`} />
-                    <span className="text-xs text-neutral-200 group-hover:text-white transition truncate flex-1">
+                    <span className="text-[13px] text-neutral-200 group-hover:text-white transition truncate flex-1">
                       {snapshot.meta.name || "Untitled"}
                       {isCurrent && <span className="text-[10px] text-neutral-500 ml-2">{t("dashboard.active")}</span>}
                     </span>
@@ -307,7 +307,7 @@ export function WelcomeDashboard({
           )}
         </div>
 
-        <p className="text-[11px] text-neutral-600">{t("dashboard.subtitle")}</p>
+        <p className="text-xs text-neutral-600">{t("dashboard.subtitle")}</p>
       </div>
     </div>
   );
