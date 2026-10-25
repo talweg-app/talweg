@@ -1,3 +1,15 @@
+import { createFreehand } from "../utils/freehand.js";
+import { FreehandRenderer } from "./FreehandRenderer.js";
+import { PenSettings } from "./PenSettings.js";
+import { createId } from "../utils/template.js";
+import type { FreehandNode } from "@talweg/core";
+import {
+  worldDocument,
+  movedWorldDocument,
+  type Alignment,
+} from "../utils/organizeCanvas.js";
+import { GroupRenderer } from "./GroupRenderer.js";
+import { OrganizeControls } from "./OrganizeControls.js";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -29,7 +41,6 @@ import type {
   ToolType,
 } from "../types.js";
 import { buildPortSlotMap } from "../utils/connectorGeometry.js";
-import { createId } from "../utils/template.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { useCanvasGestures } from "../hooks/useCanvasGestures.js";
 import { pageNodes } from "../utils/pageNodes.js";
@@ -78,6 +89,10 @@ interface CanvasProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomToFit: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  onAlign: (alignment: Alignment) => void;
+  onDuplicate: () => void;
   onDeleteSelected?: (() => void) | undefined;
   onAddMindmapChild?: (() => void) | undefined;
   onAddMindmapSibling?: (() => void) | undefined;
@@ -93,10 +108,7 @@ interface CanvasProps {
 
 function aabbIntersects(a: BoundingBox, b: BoundingBox): boolean {
   return (
-    a.minX <= b.maxX &&
-    a.maxX >= b.minX &&
-    a.minY <= b.maxY &&
-    a.maxY >= b.minY
+    a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
   );
 }
 
@@ -107,7 +119,7 @@ const EMPTY_PORT_SLOTS: ReadonlyMap<string, Anchor> = new Map();
 export function Canvas({
   viewportRef: containerRef,
   onImportImage,
-  document,
+  document: storedDocument,
   camera,
   onCameraChange,
   activeTool,
@@ -126,6 +138,10 @@ export function Canvas({
   onZoomIn,
   onZoomOut,
   onZoomToFit,
+  onGroup,
+  onUngroup,
+  onAlign,
+  onDuplicate,
   onDeleteSelected,
   onAddMindmapChild,
   onAddMindmapSibling,
@@ -139,16 +155,31 @@ export function Canvas({
   onDeletePage,
 }: CanvasProps) {
   const { t } = useTranslation();
+  const document = useMemo(
+    () => (storedDocument ? worldDocument(storedDocument) : null),
+    [storedDocument],
+  );
   const { theme } = useTheme();
   const [hintDismissed, setHintDismissed] = useState(false);
   useEffect(() => {
     const dismiss = (event: Event) => {
-      if (event.target instanceof Element && event.target.closest(".canvas-empty-state button")) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".canvas-empty-state button")
+      )
+        return;
       setHintDismissed(true);
     };
-    window.addEventListener("pointerdown", dismiss, { capture: true, once: true });
+    window.addEventListener("pointerdown", dismiss, {
+      capture: true,
+      once: true,
+    });
     window.addEventListener("keydown", dismiss, { capture: true, once: true });
-    window.addEventListener("wheel", dismiss, { capture: true, passive: true, once: true });
+    window.addEventListener("wheel", dismiss, {
+      capture: true,
+      passive: true,
+      once: true,
+    });
     return () => {
       window.removeEventListener("pointerdown", dismiss, true);
       window.removeEventListener("keydown", dismiss, true);
@@ -158,16 +189,63 @@ export function Canvas({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const imagePointRef = useRef<Point2D | undefined>(undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const strokeRef = useRef<{
+    id: NodeId;
+    pointerId: number;
+    points: Point2D[];
+    color: string | null;
+    width: number;
+    theme: "light" | "dark";
+  } | null>(null);
+  const [strokePreview, setStrokePreview] = useState<FreehandNode | null>(null);
+  const [penColor, setPenColor] = useState<string | null>(null);
+  const [penWidth, setPenWidth] = useState(3);
+
   const [isSpacePressed, setIsSpacePressed] = useState(false);
-  const [connectingSourceId, setConnectingSourceId] = useState<NodeId | null>(null);
-  const [connectingSourceAnchor, setConnectingSourceAnchor] = useState<CompassAnchor | null>(null);
+  const [connectingSourceId, setConnectingSourceId] = useState<NodeId | null>(
+    null,
+  );
+  const [connectingSourceAnchor, setConnectingSourceAnchor] =
+    useState<CompassAnchor | null>(null);
   const [hoveredArrowId, setHoveredArrowId] = useState<NodeId | null>(null);
   const [labelLayer, setLabelLayer] = useState<SVGSVGElement | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Local optimistic drag and resize positions for zero-latency 60fps interaction
-  const [dragOffsets, setDragOffsets] = useState<ReadonlyMap<NodeId, Point2D>>(new Map());
-  const [resizeOffsets, setResizeOffsets] = useState<{ id: NodeId; box: TransformBox2D } | null>(null);
+  const [dragOffsets, setDragOffsets] = useState<ReadonlyMap<NodeId, Point2D>>(
+    new Map(),
+  );
+  const [resizeOffsets, setResizeOffsets] = useState<{
+    id: NodeId;
+    box: TransformBox2D;
+  } | null>(null);
+
+  const cancelInteraction = useCallback(() => {
+    strokeRef.current = null;
+    setStrokePreview(null);
+    setDragState(null);
+    setDragOffsets(new Map());
+    setResizeOffsets(null);
+  }, []);
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancelInteraction();
+    };
+    window.addEventListener("blur", cancelInteraction);
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("blur", cancelInteraction);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [cancelInteraction]);
+  useEffect(() => {
+    cancelInteraction();
+    if (activeTool === "pen") {
+      setHintDismissed(true);
+      setContextMenu(null);
+      onSelectNodeIds(new Set());
+    }
+  }, [activeTool, activePageId, cancelInteraction, onSelectNodeIds]);
 
   useCanvasGestures(containerRef, onCameraChange);
   useEffect(() => {
@@ -184,7 +262,11 @@ export function Canvas({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
         const target = e.target as HTMLElement;
-        if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA" && !target.isContentEditable) {
+        if (
+          target.tagName !== "INPUT" &&
+          target.tagName !== "TEXTAREA" &&
+          !target.isContentEditable
+        ) {
           e.preventDefault();
           setIsSpacePressed(true);
         }
@@ -230,17 +312,30 @@ export function Canvas({
       const x = bounds.left + bounds.width / 2;
       const y = bounds.top + bounds.height / 2;
       onSelectNodeIds(new Set());
-      setContextMenu({ clientPoint: { x, y }, worldPoint: toWorld(x, y), nodeId: null });
+      setContextMenu({
+        clientPoint: { x, y },
+        worldPoint: toWorld(x, y),
+        nodeId: null,
+      });
     };
     window.addEventListener("talweg:insert", openInsert);
-    return () => { window.removeEventListener("talweg:insert", openInsert); };
+    return () => {
+      window.removeEventListener("talweg:insert", openInsert);
+    };
   }, [onSelectNodeIds, toWorld]);
 
   const createNodeAt = useCallback(
     (tool: ToolType, worldPoint: Point2D): boolean => {
+      if (tool === "pen") {
+        onSelectTool("pen");
+        return true;
+      }
       if (tool === "image") {
         const bounds = containerRef.current?.getBoundingClientRect();
-        imagePointRef.current = { x: (worldPoint.x + camera.x) * camera.zoom + (bounds?.left ?? 0), y: (worldPoint.y + camera.y) * camera.zoom + (bounds?.top ?? 0) };
+        imagePointRef.current = {
+          x: (worldPoint.x + camera.x) * camera.zoom + (bounds?.left ?? 0),
+          y: (worldPoint.y + camera.y) * camera.zoom + (bounds?.top ?? 0),
+        };
         imageInputRef.current?.click();
         return true;
       }
@@ -252,6 +347,68 @@ export function Canvas({
     },
     [mode, onAddNode, onSelectTool, camera, containerRef, theme],
   );
+
+  const startStroke = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeTool !== "pen" || isSpacePressed || event.button !== 0) return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        ".pen-settings, .canvas-context-menu, .canvas-organize-panel, .canvas-pages-panel, .canvas-zoom-panel",
+      )
+    )
+      return;
+    if (event.pointerType === "touch" && !event.isPrimary) {
+      cancelInteraction();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const point = toWorld(event.clientX, event.clientY);
+    strokeRef.current = {
+      id: createId("freehand"),
+      pointerId: event.pointerId,
+      points: [point],
+      color: penColor,
+      width: penWidth,
+      theme,
+    };
+    setStrokePreview(
+      createFreehand([point], strokeRef.current.id, penColor, penWidth, theme),
+    );
+    onSelectNodeIds(new Set());
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const appendStroke = (
+    event: React.PointerEvent<HTMLDivElement>,
+    final = false,
+  ) => {
+    const stroke = strokeRef.current;
+    if (stroke?.pointerId !== event.pointerId) return;
+    const pointer: Omit<PointerEvent, "getCoalescedEvents"> & {
+      getCoalescedEvents?: () => PointerEvent[];
+    } = event.nativeEvent;
+    const coalesced = pointer.getCoalescedEvents?.() ?? [];
+    const samples = coalesced.length ? coalesced : [event.nativeEvent];
+    for (const sample of samples) {
+      const point = toWorld(sample.clientX, sample.clientY);
+      const last = stroke.points.at(-1);
+      if (
+        !last ||
+        final ||
+        Math.hypot(point.x - last.x, point.y - last.y) * camera.zoom >= 1
+      )
+        stroke.points.push(point);
+    }
+    setStrokePreview(
+      createFreehand(
+        stroke.points,
+        stroke.id,
+        stroke.color,
+        stroke.width,
+        stroke.theme,
+      ),
+    );
+  };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!containerRef.current || e.button === 2) return;
@@ -310,7 +467,11 @@ export function Canvas({
   };
 
   const handleResizeStart = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, handle: ResizeHandle, node: CanvasNode) => {
+    (
+      e: React.PointerEvent<HTMLDivElement>,
+      handle: ResizeHandle,
+      node: CanvasNode,
+    ) => {
       if (!containerRef.current) return;
       try {
         containerRef.current.setPointerCapture(e.pointerId);
@@ -345,6 +506,10 @@ export function Canvas({
   );
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (strokeRef.current) {
+      appendStroke(e);
+      return;
+    }
     if (!dragState) return;
 
     const screenPoint: Point2D = { x: e.clientX, y: e.clientY };
@@ -442,7 +607,7 @@ export function Canvas({
         const nextSelected = new Set<NodeId>(e.shiftKey ? selectedNodeIds : []);
         if (document) {
           for (const node of Object.values(pageNodes(document, activePageId))) {
-            if (node.type === "arrow") continue;
+            if (node.type === "arrow" || node.type === "group") continue;
             const nodeBounds = computeGroupBounds([node]);
             if (aabbIntersects(marqueeBounds, nodeBounds)) {
               nextSelected.add(node.id);
@@ -455,6 +620,21 @@ export function Canvas({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const stroke = strokeRef.current;
+    if (stroke?.pointerId === e.pointerId) {
+      appendStroke(e, true);
+      const node = createFreehand(
+        stroke.points,
+        stroke.id,
+        stroke.color,
+        stroke.width,
+        stroke.theme,
+      );
+      strokeRef.current = null;
+      setStrokePreview(null);
+      onAddNode(node);
+      onSelectNodeIds(new Set());
+    }
     try {
       if (containerRef.current?.hasPointerCapture(e.pointerId)) {
         containerRef.current.releasePointerCapture(e.pointerId);
@@ -541,11 +721,15 @@ export function Canvas({
       }
 
       const nextSelected = e.shiftKey
-        ? new Set(selectedNodeIds).add(id)
-        : new Set([id]);
+        ? selectedNodeIds.has(id)
+          ? new Set([...selectedNodeIds].filter((selected) => selected !== id))
+          : new Set(selectedNodeIds).add(id)
+        : selectedNodeIds.has(id)
+          ? new Set(selectedNodeIds)
+          : new Set([id]);
       onSelectNodeIds(nextSelected);
 
-      if (!document) return;
+      if (!document || !nextSelected.has(id)) return;
 
       const selected = document.nodes[id];
       if (!selected || selected.type === "arrow") return;
@@ -593,16 +777,11 @@ export function Canvas({
     const modifiedNodes = pageNodes(document, activePageId);
 
     if (dragOffsets.size > 0) {
-      for (const [id, pos] of dragOffsets.entries()) {
-        const existing = modifiedNodes[id];
-        if (existing) {
-          modifiedNodes[id] = {
-            ...existing,
-            x: pos.x,
-            y: pos.y,
-          };
-        }
-      }
+      Object.assign(
+        modifiedNodes,
+        movedWorldDocument({ ...document, nodes: modifiedNodes }, dragOffsets)
+          .nodes,
+      );
     }
 
     if (resizeOffsets) {
@@ -625,7 +804,8 @@ export function Canvas({
   }, [document, activePageId, dragOffsets, resizeOffsets]);
 
   const portSlots = useMemo(
-    () => (renderedDocument ? buildPortSlotMap(renderedDocument) : EMPTY_PORT_SLOTS),
+    () =>
+      renderedDocument ? buildPortSlotMap(renderedDocument) : EMPTY_PORT_SLOTS,
     [renderedDocument],
   );
 
@@ -642,14 +822,18 @@ export function Canvas({
   const selectedArrows = useMemo(() => {
     if (!renderedDocument) return [];
     return Object.values(renderedDocument.nodes).filter(
-      (node): node is ArrowNode => node.type === "arrow" && selectedNodeIds.has(node.id),
+      (node): node is ArrowNode =>
+        node.type === "arrow" && selectedNodeIds.has(node.id),
     );
   }, [renderedDocument, selectedNodeIds]);
 
   const arrowsWithHandles = useMemo(() => {
     if (!renderedDocument) return [];
     const ids = new Set<NodeId>(selectedArrows.map((a) => a.id));
-    if (hoveredArrowId && renderedDocument.nodes[hoveredArrowId]?.type === "arrow") {
+    if (
+      hoveredArrowId &&
+      renderedDocument.nodes[hoveredArrowId]?.type === "arrow"
+    ) {
       ids.add(hoveredArrowId);
     }
     return Array.from(ids)
@@ -663,39 +847,53 @@ export function Canvas({
   const gridOffsetX = (camera.x * camera.zoom) % gridSize;
   const gridOffsetY = (camera.y * camera.zoom) % gridSize;
 
-  const cursorClass = dragState?.mode === "pan"
-    ? "cursor-grabbing"
-    : isSpacePressed || activeTool === "pan"
-      ? "cursor-grab"
-      : activeTool === "arrow" || connectingSourceId
-        ? "cursor-crosshair"
-        : activeTool === "select"
-          ? "cursor-default"
-          : "cursor-crosshair";
+  const cursorClass =
+    dragState?.mode === "pan"
+      ? "cursor-grabbing"
+      : isSpacePressed || activeTool === "pan"
+        ? "cursor-grab"
+        : activeTool === "arrow" || connectingSourceId
+          ? "cursor-crosshair"
+          : activeTool === "select"
+            ? "cursor-default"
+            : "cursor-crosshair";
 
   return (
     <div
       ref={containerRef}
       data-testid="canvas"
-      className={`relative w-full h-full overflow-hidden overscroll-none bg-[var(--canvas-bg)] select-none touch-none ${cursorClass}`}
+      className={`relative w-full h-full overflow-clip overscroll-none bg-[var(--canvas-bg)] select-none touch-none ${cursorClass}`}
       style={{
-        backgroundImage: "radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)",
+        backgroundImage:
+          "radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)",
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
         backgroundPosition: `${String(gridOffsetX)}px ${String(gridOffsetY)}px`,
       }}
+      onPointerDownCapture={startStroke}
       onPointerDown={handlePointerDown}
+      onPointerCancel={cancelInteraction}
+      onLostPointerCapture={cancelInteraction}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onContextMenu={(e) => {
         e.preventDefault();
-        const target = e.target instanceof Element ? e.target.closest("[data-node-id]") : null;
+        const target =
+          e.target instanceof Element
+            ? e.target.closest("[data-node-id]")
+            : null;
         const nodeId = target?.getAttribute("data-node-id") as NodeId | null;
-        if (nodeId && !selectedNodeIds.has(nodeId)) onSelectNodeIds(new Set([nodeId]));
+        if (nodeId && !selectedNodeIds.has(nodeId))
+          onSelectNodeIds(new Set([nodeId]));
         if (!nodeId) onSelectNodeIds(new Set());
-        setDragState(null);
+        cancelInteraction();
         setContextMenu({
           nodeId,
-          cellKey: e.target instanceof Element ? e.target.closest("[data-table-cell]")?.getAttribute("data-table-cell") ?? null : null,
+          cellKey:
+            e.target instanceof Element
+              ? (e.target
+                  .closest("[data-table-cell]")
+                  ?.getAttribute("data-table-cell") ?? null)
+              : null,
           clientPoint: { x: e.clientX, y: e.clientY },
           worldPoint: toWorld(e.clientX, e.clientY),
         });
@@ -706,11 +904,20 @@ export function Canvas({
         }
       }}
     >
-      <input ref={imageInputRef} type="file" accept="image/*" multiple hidden aria-label={t("canvas.importImages")} onChange={(event) => {
-        const files = Array.from(event.currentTarget.files ?? []);
-        event.currentTarget.value = "";
-        for (const file of files) void onImportImage(file, imagePointRef.current);
-      }} />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        aria-label={t("canvas.importImages")}
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          for (const file of files)
+            void onImportImage(file, imagePointRef.current);
+        }}
+      />
       {/* World Space Transformed Container */}
       {renderedDocument && (
         <div
@@ -720,60 +927,103 @@ export function Canvas({
             transform: `matrix(${String(camera.zoom)}, 0, 0, ${String(camera.zoom)}, ${String(camera.x * camera.zoom)}, ${String(camera.y * camera.zoom)})`,
           }}
         >
+          {strokePreview && <FreehandRenderer node={strokePreview} preview />}
           {/* SVG Layer for routed edge connectors */}
-          <svg focusable="false" className="canvas-connector-layer absolute inset-0 w-full h-full overflow-visible pointer-events-none">
-            {sceneNodes.arrows
-              .map((arrow) => (
-                <ConnectorRenderer
-                  key={arrow.id}
-                  arrow={arrow}
-                  labelLayer={labelLayer}
-                  document={renderedDocument}
-                  portSlots={portSlots}
-                  isSelected={selectedNodeIds.has(arrow.id)}
-                  onSelect={handleNodeSelect}
-                  onEditLabel={(id, point) => {
-                    onSelectNodeIds(new Set([id]));
-                    setContextMenu({ nodeId: id, clientPoint: point, worldPoint: toWorld(point.x, point.y) });
-                  }}
-                  onHoverArrow={setHoveredArrowId}
-                />
-              ))}
+          <svg
+            focusable="false"
+            className="canvas-connector-layer absolute inset-0 w-full h-full overflow-visible pointer-events-none"
+          >
+            {sceneNodes.arrows.map((arrow) => (
+              <ConnectorRenderer
+                key={arrow.id}
+                arrow={arrow}
+                labelLayer={labelLayer}
+                document={renderedDocument}
+                portSlots={portSlots}
+                isSelected={selectedNodeIds.has(arrow.id)}
+                onSelect={handleNodeSelect}
+                onEditLabel={(id, point) => {
+                  onSelectNodeIds(new Set([id]));
+                  setContextMenu({
+                    nodeId: id,
+                    clientPoint: point,
+                    worldPoint: toWorld(point.x, point.y),
+                  });
+                }}
+                onHoverArrow={setHoveredArrowId}
+              />
+            ))}
           </svg>
 
           {/* HTML Nodes Layer */}
           <div className="absolute inset-0 pointer-events-none">
             {sceneNodes.shapes
+              .filter((node) => node.type === "group")
               .map((node) => (
-                <NodeRenderer
+                <GroupRenderer
                   key={node.id}
                   node={node}
-                  adapter={adapter}
-                  isSelected={selectedNodeIds.has(node.id)}
-                  isPanActive={isSpacePressed || activeTool === "pan"}
+                  document={renderedDocument}
+                  selected={selectedNodeIds.has(node.id)}
                   onSelect={handleNodeSelect}
-                  onUpdateData={onUpdateNodeData}
-                  onUpdateRuns={(id, field, runs: TextRun[]) => {
-                    const node = document?.nodes[id];
-                    if (node && JSON.stringify(node.textRuns?.[field] ?? []) !== JSON.stringify(runs)) onUpdateNode?.(id, { textRuns: { ...node.textRuns, [field]: runs } });
-                  }}
-                  onUpdateNote={(id, note) => { onUpdateNode?.(id, { note }); }}
-                  onStartConnect={(sourceId, anchor) => {
-                    setConnectingSourceId(sourceId);
-                    setConnectingSourceAnchor(anchor ?? "e");
+                  onRename={(id, title) => {
+                    onUpdateNode?.(id, {
+                      meta: { ...document?.nodes[id]?.meta, title },
+                    });
                   }}
                 />
               ))}
+            {sceneNodes.shapes.map((node) => (
+              <NodeRenderer
+                key={node.id}
+                node={node}
+                adapter={adapter}
+                isSelected={selectedNodeIds.has(node.id)}
+                isPanActive={isSpacePressed || activeTool === "pan"}
+                onSelect={handleNodeSelect}
+                onUpdateData={onUpdateNodeData}
+                onUpdateRuns={(id, field, runs: TextRun[]) => {
+                  const node = document?.nodes[id];
+                  if (
+                    node &&
+                    JSON.stringify(node.textRuns?.[field] ?? []) !==
+                      JSON.stringify(runs)
+                  )
+                    onUpdateNode?.(id, {
+                      textRuns: { ...node.textRuns, [field]: runs },
+                    });
+                }}
+                onUpdateNote={(id, note) => {
+                  onUpdateNode?.(id, { note });
+                }}
+                onStartConnect={(sourceId, anchor) => {
+                  setConnectingSourceId(sourceId);
+                  setConnectingSourceAnchor(anchor ?? "e");
+                }}
+              />
+            ))}
           </div>
 
-          <svg data-testid="canvas-label-layer" ref={setLabelLayer} focusable="false" className="canvas-connector-layer absolute inset-0 w-full h-full overflow-visible pointer-events-none" style={{ zIndex: 2147483646 }} />
+          <svg
+            data-testid="canvas-label-layer"
+            ref={setLabelLayer}
+            focusable="false"
+            className="canvas-connector-layer absolute inset-0 w-full h-full overflow-visible pointer-events-none"
+            style={{ zIndex: 2147483646 }}
+          />
 
           {/* 8-Point Selection Handles Layer */}
           {selectedNodeIds.size === 1 &&
             (() => {
               const [selectedId] = [...selectedNodeIds];
-              const selectedNode = selectedId ? renderedDocument.nodes[selectedId] : undefined;
-              if (selectedNode && selectedNode.type !== "arrow") {
+              const selectedNode = selectedId
+                ? renderedDocument.nodes[selectedId]
+                : undefined;
+              if (
+                selectedNode &&
+                selectedNode.type !== "arrow" &&
+                selectedNode.type !== "group"
+              ) {
                 return (
                   <SelectionBox
                     node={selectedNode}
@@ -801,10 +1051,17 @@ export function Canvas({
             <div
               className="absolute pointer-events-none border border-dashed border-amber-500/80 bg-amber-500/5 z-40 rounded-sm"
               style={{
-                left: Math.min(dragState.startWorld.x, dragState.currentWorld.x),
+                left: Math.min(
+                  dragState.startWorld.x,
+                  dragState.currentWorld.x,
+                ),
                 top: Math.min(dragState.startWorld.y, dragState.currentWorld.y),
-                width: Math.abs(dragState.currentWorld.x - dragState.startWorld.x),
-                height: Math.abs(dragState.currentWorld.y - dragState.startWorld.y),
+                width: Math.abs(
+                  dragState.currentWorld.x - dragState.startWorld.x,
+                ),
+                height: Math.abs(
+                  dragState.currentWorld.y - dragState.startWorld.y,
+                ),
                 borderWidth: `${String(Math.max(1, Math.round(1.5 / camera.zoom)))}px`,
               }}
             />
@@ -812,14 +1069,31 @@ export function Canvas({
         </div>
       )}
 
-      {!hintDismissed && renderedDocument && sceneNodes.shapes.length === 0 && sceneNodes.arrows.length === 0 && (
-        <div className="canvas-empty-state">
-          <div className="canvas-empty-symbol"><Plus size={22} strokeWidth={1.2} /></div>
-          <h2>{t("canvas.emptyTitle")}</h2>
-          <p>{t("canvas.emptyDescription")}</p>
-          <button type="button" onPointerDown={(event) => { event.stopPropagation(); }} onClick={() => { setHintDismissed(true); window.dispatchEvent(new Event("talweg:insert")); }}><Plus size={13} />{t("canvas.emptyAction")}</button>
-        </div>
-      )}
+      {!hintDismissed &&
+        renderedDocument &&
+        sceneNodes.shapes.length === 0 &&
+        sceneNodes.arrows.length === 0 && (
+          <div className="canvas-empty-state">
+            <div className="canvas-empty-symbol">
+              <Plus size={22} strokeWidth={1.2} />
+            </div>
+            <h2>{t("canvas.emptyTitle")}</h2>
+            <p>{t("canvas.emptyDescription")}</p>
+            <button
+              type="button"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={() => {
+                setHintDismissed(true);
+                window.dispatchEvent(new Event("talweg:insert"));
+              }}
+            >
+              <Plus size={13} />
+              {t("canvas.emptyAction")}
+            </button>
+          </div>
+        )}
 
       {/* Floating Status Badge when Connecting Nodes */}
       {connectingSourceId && (
@@ -833,45 +1107,86 @@ export function Canvas({
         <ContextMenu
           state={contextMenu}
           mode={mode}
-          nodes={contextMenu.nodeId && document
-            ? [...selectedNodeIds].map((id) => {
-                const node = document.nodes[id];
-                if (node?.type === "table" && contextMenu.cellKey) return { ...node, style: { ...node.style, ...node.data.cellStyles?.[contextMenu.cellKey] } };
-                return node;
-              }).filter((node): node is CanvasNode => !!node)
-            : []}
+          nodes={
+            contextMenu.nodeId && document
+              ? [...selectedNodeIds]
+                  .map((id) => {
+                    const node = document.nodes[id];
+                    if (node?.type === "table" && contextMenu.cellKey)
+                      return {
+                        ...node,
+                        style: {
+                          ...node.style,
+                          ...node.data.cellStyles?.[contextMenu.cellKey],
+                        },
+                      };
+                    return node;
+                  })
+                  .filter((node): node is CanvasNode => !!node)
+              : []
+          }
           onEditNote={(id) => {
             const node = document?.nodes[id];
-            if (node && typeof node.note !== "string") onUpdateNode?.(id, { note: "" });
-            window.dispatchEvent(new CustomEvent("talweg:edit-note", { detail: id }));
+            if (node && typeof node.note !== "string")
+              onUpdateNode?.(id, { note: "" });
+            window.dispatchEvent(
+              new CustomEvent("talweg:edit-note", { detail: id }),
+            );
           }}
-          onRemoveNote={(id) => { onUpdateNode?.(id, { note: null }); }}
-          onUpdateLabel={(id, label) => { onUpdateNodeData(id, { label }); }}
+          onRemoveNote={(id) => {
+            onUpdateNode?.(id, { note: null });
+          }}
+          onUpdateLabel={(id, label) => {
+            onUpdateNodeData(id, { label });
+          }}
           onUpdateStyle={(style) => {
             for (const id of selectedNodeIds) {
               const node = document?.nodes[id];
+              if (node?.type === "group") continue;
               if (node?.type === "table" && contextMenu.cellKey) {
-                onUpdateNodeData(id, { cellStyles: { ...node.data.cellStyles, [contextMenu.cellKey]: { ...node.data.cellStyles?.[contextMenu.cellKey], ...style } } });
+                onUpdateNodeData(id, {
+                  cellStyles: {
+                    ...node.data.cellStyles,
+                    [contextMenu.cellKey]: {
+                      ...node.data.cellStyles?.[contextMenu.cellKey],
+                      ...style,
+                    },
+                  },
+                });
               } else onUpdateNodeStyle(id, { ...style });
             }
           }}
-          onTableScope={() => { setContextMenu({ ...contextMenu, cellKey: null }); }}
-          onDuplicate={() => {
-            if (!document) return;
-            const copies = [...selectedNodeIds].flatMap((id) => {
-              const node = document.nodes[id];
-              if (!node || node.type === "arrow") return [];
-              const timestamp = Date.now();
-              return [{ ...structuredClone(node), id: createId(node.type), x: node.x + 24, y: node.y + 24, createdAt: timestamp, updatedAt: timestamp }];
-            });
-            copies.forEach(onAddNode);
-            onSelectNodeIds(new Set(copies.map((node) => node.id)));
+          onTableScope={() => {
+            setContextMenu({ ...contextMenu, cellKey: null });
           }}
+          onDuplicate={onDuplicate}
+          organization={
+            document ? (
+              <OrganizeControls
+                document={document}
+                selectedIds={selectedNodeIds}
+                onGroup={() => {
+                  onGroup();
+                  setContextMenu(null);
+                }}
+                onUngroup={() => {
+                  onUngroup();
+                  setContextMenu(null);
+                }}
+                onAlign={onAlign}
+              />
+            ) : null
+          }
           onArrange={(front) => {
             if (!document || !onUpdateNode) return;
-            const layers = Object.values(document.nodes).map((node) => node.zIndex);
-            const layer = front ? Math.max(...layers, 0) + 1 : Math.min(...layers, 0) - 1;
-            for (const id of selectedNodeIds) onUpdateNode(id, { zIndex: layer });
+            const layers = Object.values(document.nodes).map(
+              (node) => node.zIndex,
+            );
+            const layer = front
+              ? Math.max(...layers, 0) + 1
+              : Math.min(...layers, 0) - 1;
+            for (const id of selectedNodeIds)
+              onUpdateNode(id, { zIndex: layer });
           }}
           onClose={() => {
             setContextMenu(null);
@@ -889,6 +1204,31 @@ export function Canvas({
         />
       )}
 
+      {activeTool === "pen" && !contextMenu && (
+        <PenSettings
+          color={penColor}
+          width={penWidth}
+          onColor={setPenColor}
+          onWidth={setPenWidth}
+        />
+      )}
+      {activeTool !== "pen" && !contextMenu && document && (
+        <div
+          className="canvas-organize-panel"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <OrganizeControls
+            document={document}
+            selectedIds={selectedNodeIds}
+            onGroup={onGroup}
+            onUngroup={onUngroup}
+            onAlign={onAlign}
+          />
+        </div>
+      )}
+
       {/* Floating Zoom Controls (bottom-right) */}
       <ZoomControls
         zoom={camera.zoom}
@@ -899,17 +1239,22 @@ export function Canvas({
       />
 
       {/* Floating Page Tabs Dock (bottom-left) */}
-      {pages && activePageId && onSelectPage && onAddPage && onRenamePage && onDeletePage && (
-        <PageTabsBar
-          boardId={boardId}
-          pages={pages}
-          activePageId={activePageId}
-          onSelectPage={onSelectPage}
-          onAddPage={onAddPage}
-          onRenamePage={onRenamePage}
-          onDeletePage={onDeletePage}
-        />
-      )}
+      {pages &&
+        activePageId &&
+        onSelectPage &&
+        onAddPage &&
+        onRenamePage &&
+        onDeletePage && (
+          <PageTabsBar
+            boardId={boardId}
+            pages={pages}
+            activePageId={activePageId}
+            onSelectPage={onSelectPage}
+            onAddPage={onAddPage}
+            onRenamePage={onRenamePage}
+            onDeletePage={onDeletePage}
+          />
+        )}
     </div>
   );
 }

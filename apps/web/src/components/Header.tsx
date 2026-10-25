@@ -1,3 +1,5 @@
+import { CollaborationPanel } from "./CollaborationPanel.js";
+import type { PeerState } from "../utils/peerSession.js";
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -19,6 +21,12 @@ import { ThemePicker } from "./ThemePicker.js";
 import { LanguagePicker } from "./LanguagePicker.js";
 
 interface HeaderProps {
+  collaboration: PeerState;
+  onStartHosting: () => Promise<void>;
+  onApprovePeer: (id: string, accept: boolean) => void;
+  onSaveCopy: () => Promise<string>;
+  onFocusPeer: (id: string) => void;
+  onStopSharing: () => void;
   adapter?: StorageAdapter | null | undefined;
   document: CanvasDocument | null;
   mode: CanvasMode;
@@ -41,6 +49,12 @@ const MODES: readonly {
 ];
 
 export function Header({
+  collaboration,
+  onStartHosting,
+  onStopSharing,
+  onApprovePeer,
+  onSaveCopy,
+  onFocusPeer,
   adapter,
   document,
   mode,
@@ -69,7 +83,10 @@ export function Header({
   useEffect(() => {
     if (!modeMenuOpen) return;
     const handlePointerDown = (e: PointerEvent) => {
-      if (!(e.target instanceof Node) || !modeMenuRef.current?.contains(e.target)) {
+      if (
+        !(e.target instanceof Node) ||
+        !modeMenuRef.current?.contains(e.target)
+      ) {
         setModeMenuOpen(false);
       }
     };
@@ -98,31 +115,21 @@ export function Header({
   const handleSave = async () => {
     try {
       if (await onSave?.()) showToast(t("actions.savedLocally"));
-    } catch { showToast(t("actions.saveFailed")); }
-  };
-
-  const handleShare = async () => {
-    const url = new URL(window.location.href);
-    let roomId = url.searchParams.get("room");
-    if (!roomId) {
-      roomId = document?.id ? `room-${document.id}` : `shared-${Math.random().toString(36).slice(2, 8)}`;
-      url.searchParams.set("room", roomId);
-      window.history.replaceState({}, "", url.toString());
-    }
-    const shareUrl = url.toString();
-    try {
-      await navigator.clipboard.writeText(shareUrl);
     } catch {
-      // Ignore clipboard write errors in restricted contexts
+      showToast(t("actions.saveFailed"));
     }
-    showToast(t("actions.linkCopied"));
   };
 
   const handleExport = async () => {
     if (!document) return;
     try {
       const { exportToPng } = await import("../utils/export.js");
-      await exportToPng(document, `${document.name || "talweg"}.png`, adapter, theme);
+      await exportToPng(
+        document,
+        `${document.name || "talweg"}.png`,
+        adapter,
+        theme,
+      );
     } catch {
       showToast(t("actions.exportFailed"));
     }
@@ -142,19 +149,34 @@ export function Header({
           title={t("dashboard.title")}
         >
           <img src="/favicon.svg" alt="" className="w-4 h-4" />
-          <span className="hidden sm:inline text-sm font-semibold tracking-tight">Talweg</span>
+          <span className="hidden sm:inline text-sm font-semibold tracking-tight">
+            Talweg
+          </span>
         </button>
 
         <div className="h-4 w-px bg-white/[0.08]" />
 
-        <div className="canvas-document-heading"><input
-          type="text"
-          value={document?.name ?? ""}
-          onChange={(e) => onUpdateTitle?.(e.target.value)}
-          placeholder={t("canvas.titlePlaceholder")}
-          className="canvas-document-title bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-xs text-neutral-300 focus:text-neutral-100 px-1.5 h-8 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
-        />
-        <span className="canvas-save-state" data-state={fileSaveState} role="status" title={fileSaveState === "browser" ? t("files.chooseHint") : getActiveFileName() ?? ""}><span />{t(`files.${fileSaveState}`)}</span>
+        <div className="canvas-document-heading">
+          <input
+            type="text"
+            value={document?.name ?? ""}
+            onChange={(e) => onUpdateTitle?.(e.target.value)}
+            placeholder={t("canvas.titlePlaceholder")}
+            className="canvas-document-title bg-transparent hover:bg-white/[0.04] focus:bg-white/[0.05] text-xs text-neutral-300 focus:text-neutral-100 px-1.5 h-8 rounded border border-transparent focus:border-white/[0.12] outline-none max-w-[120px] sm:max-w-[220px] truncate transition"
+          />
+          <span
+            className="canvas-save-state"
+            data-state={fileSaveState}
+            role="status"
+            title={
+              fileSaveState === "browser"
+                ? t("files.chooseHint")
+                : (getActiveFileName() ?? "")
+            }
+          >
+            <span />
+            {t(`files.${fileSaveState}`)}
+          </span>
         </div>
       </div>
 
@@ -175,7 +197,9 @@ export function Header({
         >
           <ActiveModeIcon className="w-3.5 h-3.5 text-[var(--accent)]" />
           <span>{t(`modes.${mode}`)}</span>
-          <ChevronDown className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`} />
+          <ChevronDown
+            className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`}
+          />
         </button>
 
         {modeMenuOpen && (
@@ -201,16 +225,24 @@ export function Header({
                     isActive ? "bg-white/[0.05]" : "hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-[var(--accent)]" : "text-neutral-500"}`} />
+                  <Icon
+                    className={`w-3.5 h-3.5 mt-0.5 ${isActive ? "text-[var(--accent)]" : "text-neutral-500"}`}
+                  />
                   <span className="flex flex-col gap-0.5">
-                    <span className={`text-xs ${isActive ? "text-neutral-100" : "text-neutral-300"}`}>
+                    <span
+                      className={`text-xs ${isActive ? "text-neutral-100" : "text-neutral-300"}`}
+                    >
                       {t(`modes.${candidate.id}`)}
                     </span>
                     <span className="text-[10px] text-neutral-500 leading-snug">
-                      {t(`tooltips.mode${candidate.id.charAt(0).toUpperCase()}${candidate.id.slice(1)}`)}
+                      {t(
+                        `tooltips.mode${candidate.id.charAt(0).toUpperCase()}${candidate.id.slice(1)}`,
+                      )}
                     </span>
                   </span>
-                  {isActive && <Check className="w-3.5 h-3.5 text-[var(--accent)] ml-auto mt-0.5" />}
+                  {isActive && (
+                    <Check className="w-3.5 h-3.5 text-[var(--accent)] ml-auto mt-0.5" />
+                  )}
                 </button>
               );
             })}
@@ -234,20 +266,20 @@ export function Header({
         <ThemePicker compact />
         <LanguagePicker compact />
 
-        <button
-          type="button"
-          onClick={() => {
-            void handleShare();
-          }}
-          className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
-          title={t("tooltips.share")}
-        >
-          <Share2 className="w-3.5 h-3.5" />
-        </button>
+        <CollaborationPanel
+          state={collaboration}
+          onStart={onStartHosting}
+          onStop={onStopSharing}
+          onApprove={onApprovePeer}
+          onSaveCopy={onSaveCopy}
+          onFocusPeer={onFocusPeer}
+        />
 
         <button
           type="button"
-          onClick={() => { void handleSave(); }}
+          onClick={() => {
+            void handleSave();
+          }}
           className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.save")}
         >
@@ -256,7 +288,9 @@ export function Header({
 
         <button
           type="button"
-          onClick={() => { void handleExport(); }}
+          onClick={() => {
+            void handleExport();
+          }}
           className="flex items-center justify-center w-8 h-8 rounded text-neutral-400 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"
           title={t("tooltips.export")}
           aria-label={t("tooltips.export")}

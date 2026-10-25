@@ -15,9 +15,14 @@ interface PageTabsBarProps {
   onDeletePage: (pageId: PageId) => void;
 }
 
-function buildPagePath(boardId: DocumentId | string | undefined, pageId: PageId): string {
+function buildPagePath(
+  boardId: DocumentId | string | undefined,
+  pageId: PageId,
+): string {
   const hash = window.location.hash;
-  const search = window.location.search;
+  const params = new URLSearchParams(window.location.search);
+  params.delete("node");
+  const search = params.size ? `?${params.toString()}` : "";
   const bId = boardId ?? "default-doc";
   return `/board/${encodeURIComponent(bId)}/page/${encodeURIComponent(pageId)}${search}${hash}`;
 }

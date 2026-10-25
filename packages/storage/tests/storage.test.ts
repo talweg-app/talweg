@@ -1,7 +1,12 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
-import type { CanvasDocument, CanvasNode, DocumentId, NodeId } from "@talweg/core";
+import type {
+  CanvasDocument,
+  CanvasNode,
+  DocumentId,
+  NodeId,
+} from "@talweg/core";
 import {
   IndexedDBStorageAdapter,
   SCENE_META_KEY,
@@ -45,7 +50,11 @@ async function deleteStorageDatabase(): Promise<void> {
       resolve();
     };
     request.onerror = () => {
-      reject(new Error("Failed to delete the storage database", { cause: request.error }));
+      reject(
+        new Error("Failed to delete the storage database", {
+          cause: request.error,
+        }),
+      );
     };
     request.onblocked = () => {
       reject(new Error("Storage database deletion was blocked"));
@@ -169,7 +178,11 @@ function makeDocument(): CanvasDocument {
         parentId: null,
         isLocked: false,
         isVisible: true,
-        style: { fillColor: "#ffffff", strokeWidth: 2, cornerRadius: [4, 4, 0, 0] },
+        style: {
+          fillColor: "#ffffff",
+          strokeWidth: 2,
+          cornerRadius: [4, 4, 0, 0],
+        },
         data: { label: "Card", aspectRatioLocked: true },
         meta: {
           tags: ["alpha", "beta"],
@@ -206,7 +219,12 @@ function makeDocument(): CanvasDocument {
     rootNodeIds: [rectangleId, groupId],
     viewport: { x: 10, y: 20, zoom: 1.5 },
     grid: { enabled: true, size: 20, snapToGrid: false, gridType: "lines" },
-    meta: { createdAt: 100, updatedAt: 200, lastModifiedBy: "user-1", version: 3 },
+    meta: {
+      createdAt: 100,
+      updatedAt: 200,
+      lastModifiedBy: "user-1",
+      version: 3,
+    },
   };
 }
 
@@ -229,7 +247,9 @@ describe("IndexedDBStorageAdapter lifecycle", () => {
     await adapter.close();
     await adapter.close();
 
-    await expect(adapter.loadSnapshot(DOC_A)).rejects.toThrow("not initialized");
+    await expect(adapter.loadSnapshot(DOC_A)).rejects.toThrow(
+      "not initialized",
+    );
   });
 
   it("saves, replaces, and loads snapshots", async () => {
@@ -268,8 +288,9 @@ describe("IndexedDBStorageAdapter lifecycle", () => {
 
   it("rejects when an IndexedDB request fails", async () => {
     const adapter = await createAdapter();
-    const getAllSpy = vi.spyOn(IDBIndex.prototype, "getAll").mockImplementation(
-      function (this: IDBIndex): IDBRequest<unknown[]> {
+    const getAllSpy = vi
+      .spyOn(IDBIndex.prototype, "getAll")
+      .mockImplementation(function (this: IDBIndex): IDBRequest<unknown[]> {
         const request = {
           result: [],
           error: new DOMException("Request failed", "UnknownError"),
@@ -282,8 +303,7 @@ describe("IndexedDBStorageAdapter lifecycle", () => {
         });
 
         return request;
-      },
-    );
+      });
 
     try {
       await expect(adapter.loadDeltas(DOC_A, 0)).rejects.toBeDefined();
@@ -313,7 +333,8 @@ describe("IndexedDBStorageAdapter compaction", () => {
       documentId: DOC_A,
       deltasPruned: 2,
       newSnapshotClock: 2,
-      bytesReclaimed: first.updateBlob.byteLength + second.updateBlob.byteLength,
+      bytesReclaimed:
+        first.updateBlob.byteLength + second.updateBlob.byteLength,
     });
     expect(stats!.durationMs).toBeGreaterThanOrEqual(0);
 
@@ -389,7 +410,9 @@ describe("IndexedDBStorageAdapter assets", () => {
     await adapter.saveAsset(removable);
     await adapter.saveAsset(fresh);
 
-    expect(await adapter.pruneAssets(30_000, new Set([preserved.assetId]))).toBe(1);
+    expect(
+      await adapter.pruneAssets(30_000, new Set([preserved.assetId])),
+    ).toBe(1);
     expect(await adapter.loadAsset(removable.assetId)).toBeNull();
     expect(await adapter.loadAsset(preserved.assetId)).not.toBeNull();
     expect(await adapter.loadAsset(fresh.assetId)).not.toBeNull();
@@ -410,7 +433,10 @@ describe("IndexedDBStorageAdapter broadcast", () => {
     const snapshot = emptySnapshot(DOC_A, 0);
     await writer.saveSnapshot(snapshot);
 
-    const snapshotEvent = await waitForEvent(events, (event) => event.type === "snapshot_created");
+    const snapshotEvent = await waitForEvent(
+      events,
+      (event) => event.type === "snapshot_created",
+    );
     expect(snapshotEvent).toEqual({
       documentId: DOC_A,
       type: "snapshot_created",
@@ -428,11 +454,16 @@ describe("IndexedDBStorageAdapter broadcast", () => {
       (event) => event.type === "delta_appended" && event.clock === 2,
     );
     expect(deltaEvent.documentId).toBe(DOC_A);
-    expect(events.filter((event) => event.type === "delta_appended")).toHaveLength(1);
+    expect(
+      events.filter((event) => event.type === "delta_appended"),
+    ).toHaveLength(1);
 
     await writer.compact(DOC_A, 2);
 
-    const compactedEvent = await waitForEvent(events, (event) => event.type === "compacted");
+    const compactedEvent = await waitForEvent(
+      events,
+      (event) => event.type === "compacted",
+    );
     expect(compactedEvent.clock).toBe(2);
 
     unsubscribe();
@@ -606,9 +637,50 @@ describe("scene undo manager", () => {
 
     const plain = toPlainValue(map) as Record<string, unknown>;
     expect(plain.validKey).toBe("hello");
-    expect(Object.prototype.hasOwnProperty.call(plain, "__proto__")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(plain, "constructor")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(plain, "prototype")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(plain, "__proto__")).toBe(
+      false,
+    );
+    expect(Object.prototype.hasOwnProperty.call(plain, "constructor")).toBe(
+      false,
+    );
+    expect(Object.prototype.hasOwnProperty.call(plain, "prototype")).toBe(
+      false,
+    );
     yDoc.destroy();
   });
+});
+
+it("projects shared text, orders and stable table cells without losing plain document compatibility", () => {
+  const scene = createSceneDoc();
+  const nodes = scene.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
+  const node = new Y.Map<unknown>();
+  nodes.set("table-shared", node);
+  node.set("id", "table-shared");
+  node.set("type", "table");
+  const rows = new Y.Array<string>();
+  rows.push(["r1", "r2"]);
+  const columns = new Y.Array<string>();
+  columns.push(["c1", "c2"]);
+  const data = new Y.Map<unknown>();
+  node.set("data", data);
+  data.set("rowIds", rows);
+  data.set("columnIds", columns);
+  const cells = new Y.Map<unknown>();
+  data.set("cells", cells);
+  const row = new Y.Map<unknown>();
+  cells.set("r1", row);
+  row.set("c1", new Y.Text("shared"));
+  node.set("note", new Y.Text("note"));
+  const extra = scene.getText("extra");
+  extra.insert(0, "plain");
+  expect(toPlainValue(extra)).toBe("plain");
+  expect(toPlainValue(rows)).toEqual(["r1", "r2"]);
+  const document = yDocToDocument(scene);
+  const projected = document.nodes["table-shared" as NodeId];
+  expect(projected?.type === "table" && projected.data.cells).toEqual([
+    ["shared", ""],
+    ["", ""],
+  ]);
+  expect(projected?.note).toBe("note");
+  scene.destroy();
 });

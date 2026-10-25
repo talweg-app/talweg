@@ -24,6 +24,7 @@ export type CanvasMode = "whiteboard" | "diagrams" | "mindmap";
 export type ArrowEndpoint = "source" | "target";
 
 export type ToolType =
+  | "pen"
   | "markdown"
   | "image"
   | "ellipse"
@@ -42,7 +43,8 @@ export type ToolType =
   | "delete";
 
 export interface DragState {
-  readonly mode: "move" | "pan" | "connect" | "box-select" | "marquee" | "resize";
+  readonly mode:
+    "move" | "pan" | "connect" | "box-select" | "marquee" | "resize";
   readonly startScreen: Point2D;
   readonly startWorld: Point2D;
   readonly lastScreen: Point2D;

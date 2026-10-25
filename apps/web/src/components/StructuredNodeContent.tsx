@@ -4,7 +4,10 @@ import { Plus, Minus } from "lucide-react";
 import { RichText } from "./RichText.js";
 import { useTheme } from "../hooks/useTheme.js";
 import { canvasBackground } from "../themeContext.js";
-import { ensureTextContrast, resolveFillColor } from "../utils/colorContrast.js";
+import {
+  ensureTextContrast,
+  resolveFillColor,
+} from "../utils/colorContrast.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 
 interface StructuredNodeContentProps {
@@ -24,7 +27,10 @@ export function StructuredNodeContent({
 }: StructuredNodeContentProps) {
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const backgroundColor = resolveFillColor(node.style.fillColor ?? "#242729", canvasBackground[theme]);
+  const backgroundColor = resolveFillColor(
+    node.style.fillColor ?? "#242729",
+    canvasBackground[theme],
+  );
   if (node.type === "checklist") {
     const items = node.data.items;
     return (
@@ -129,10 +135,10 @@ export function StructuredNodeContent({
         <table>
           <tbody>
             {cells.map((row, rowIndex) => (
-              <tr key={rowIndex}>
+              <tr key={node.data.rowIds?.[rowIndex] ?? rowIndex}>
                 {row.map((cell, columnIndex) => (
                   <td
-                    key={columnIndex}
+                    key={node.data.columnIds?.[columnIndex] ?? columnIndex}
                     data-table-cell={`${String(rowIndex)}:${String(columnIndex)}`}
                     style={
                       node.data.cellStyles?.[
@@ -143,7 +149,19 @@ export function StructuredNodeContent({
                               node.data.cellStyles[
                                 `${String(rowIndex)}:${String(columnIndex)}`
                               ]?.fillColor,
-                            color: ensureTextContrast(node.data.cellStyles[`${String(rowIndex)}:${String(columnIndex)}`]?.textColor ?? node.style.textColor ?? "#eeeeeb", resolveFillColor(node.data.cellStyles[`${String(rowIndex)}:${String(columnIndex)}`]?.fillColor ?? backgroundColor, backgroundColor)),
+                            color: ensureTextContrast(
+                              node.data.cellStyles[
+                                `${String(rowIndex)}:${String(columnIndex)}`
+                              ]?.textColor ??
+                                node.style.textColor ??
+                                "#eeeeeb",
+                              resolveFillColor(
+                                node.data.cellStyles[
+                                  `${String(rowIndex)}:${String(columnIndex)}`
+                                ]?.fillColor ?? backgroundColor,
+                                backgroundColor,
+                              ),
+                            ),
                             borderColor:
                               node.data.cellStyles[
                                 `${String(rowIndex)}:${String(columnIndex)}`
@@ -179,7 +197,12 @@ export function StructuredNodeContent({
                     }
                   >
                     <RichText
-                      backgroundColor={resolveFillColor(node.data.cellStyles?.[`${String(rowIndex)}:${String(columnIndex)}`]?.fillColor ?? backgroundColor, backgroundColor)}
+                      backgroundColor={resolveFillColor(
+                        node.data.cellStyles?.[
+                          `${String(rowIndex)}:${String(columnIndex)}`
+                        ]?.fillColor ?? backgroundColor,
+                        backgroundColor,
+                      )}
                       label={`${t("insert.cell")} ${String(rowIndex + 1)}, ${String(columnIndex + 1)}`}
                       placeholder={
                         rowIndex === 0
@@ -192,16 +215,36 @@ export function StructuredNodeContent({
                           `cell:${String(rowIndex)}:${String(columnIndex)}`
                         ]
                       }
+                      onPasteGrid={(text) => {
+                        const row = node.data.rowIds?.[rowIndex];
+                        const column = node.data.columnIds?.[columnIndex];
+                        if (
+                          !row ||
+                          !column ||
+                          !/[\t\n]/.test(text) ||
+                          text.startsWith("talweg-fragment:")
+                        )
+                          return false;
+                        onUpdateData(node.id, { _grid: { row, column, text } });
+                        return true;
+                      }}
                       onCommit={(text, runs) => {
-                        onUpdateData(node.id, {
-                          cells: cells.map((currentRow, r) =>
-                            r === rowIndex
-                              ? currentRow.map((currentCell, c) =>
-                                  c === columnIndex ? text : currentCell,
-                                )
-                              : currentRow,
-                          ),
-                        });
+                        const row = node.data.rowIds?.[rowIndex];
+                        const column = node.data.columnIds?.[columnIndex];
+                        if (row && column)
+                          onUpdateData(node.id, {
+                            _cell: { row, column, text },
+                          });
+                        else
+                          onUpdateData(node.id, {
+                            cells: cells.map((values, r) =>
+                              r === rowIndex
+                                ? values.map((value, c) =>
+                                    c === columnIndex ? text : value,
+                                  )
+                                : values,
+                            ),
+                          });
                         onUpdateRuns(
                           node.id,
                           `cell:${String(rowIndex)}:${String(columnIndex)}`,
@@ -221,7 +264,7 @@ export function StructuredNodeContent({
           type="button"
           onClick={() => {
             onUpdateData(node.id, {
-              cells: [...cells, Array.from({ length: columns }, () => "")],
+              _tableAction: { kind: "addRow", id: crypto.randomUUID() },
             });
           }}
         >
@@ -231,7 +274,9 @@ export function StructuredNodeContent({
         <button
           type="button"
           onClick={() => {
-            onUpdateData(node.id, { cells: cells.map((row) => [...row, ""]) });
+            onUpdateData(node.id, {
+              _tableAction: { kind: "addColumn", id: crypto.randomUUID() },
+            });
           }}
         >
           <Plus size={12} />
@@ -244,7 +289,7 @@ export function StructuredNodeContent({
           title={t("insert.removeRow")}
           onClick={() => {
             onUpdateData(node.id, {
-              cells: cells.slice(0, -1),
+              _tableAction: { kind: "removeRow", id: node.data.rowIds?.at(-1) },
               cellStyles: Object.fromEntries(
                 Object.entries(node.data.cellStyles ?? {}).filter(
                   ([key]) => Number(key.split(":")[0]) < cells.length - 1,
@@ -263,7 +308,10 @@ export function StructuredNodeContent({
           title={t("insert.removeColumn")}
           onClick={() => {
             onUpdateData(node.id, {
-              cells: cells.map((row) => row.slice(0, -1)),
+              _tableAction: {
+                kind: "removeColumn",
+                id: node.data.columnIds?.at(-1),
+              },
               cellStyles: Object.fromEntries(
                 Object.entries(node.data.cellStyles ?? {}).filter(
                   ([key]) => Number(key.split(":")[1]) < columns - 1,

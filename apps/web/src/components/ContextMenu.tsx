@@ -1,5 +1,9 @@
+import { freehandColor } from "../utils/freehand.js";
 import { useTheme } from "../hooks/useTheme.js";
-import { nodeAppearance, connectorAppearance } from "../utils/sceneAppearance.js";
+import {
+  nodeAppearance,
+  connectorAppearance,
+} from "../utils/sceneAppearance.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
@@ -7,6 +11,9 @@ import {
   CheckSquare,
   Circle,
   Copy,
+  Scissors,
+  ClipboardPaste,
+  Download,
   CornerDownRight,
   CreditCard,
   Database,
@@ -14,6 +21,7 @@ import {
   GitBranch,
   Maximize2,
   Pill,
+  PenLine,
   Search,
   Square,
   StickyNote,
@@ -48,6 +56,7 @@ interface ContextMenuProps {
   onRemoveNote: (id: NodeId) => void;
   onUpdateLabel: (id: NodeId, label: string) => void;
   onDuplicate: () => void;
+  organization?: React.ReactNode;
   onArrange: (front: boolean) => void;
   onDeleteSelected?: (() => void) | undefined;
   onAddMindmapChild?: (() => void) | undefined;
@@ -63,6 +72,7 @@ const ELEMENTS: readonly {
   icon: typeof Square;
   group: "content" | "shapes";
 }[] = [
+  { tool: "pen", icon: PenLine, group: "content" },
   { tool: "image", icon: ImagePlus, group: "content" },
   { tool: "markdown", icon: FileText, group: "content" },
   { tool: "sticker", icon: StickyNote, group: "content" },
@@ -89,6 +99,7 @@ export function ContextMenu({
   onEditNote,
   onRemoveNote,
   onDuplicate,
+  organization,
   onArrange,
   onDeleteSelected,
   onAddMindmapChild,
@@ -104,7 +115,8 @@ export function ContextMenu({
     top: state.clientPoint.y,
   });
   const hasSelection = nodes.length > 0;
-  const singleArrow = nodes.length === 1 && nodes[0]?.type === "arrow" ? nodes[0] : null;
+  const singleArrow =
+    nodes.length === 1 && nodes[0]?.type === "arrow" ? nodes[0] : null;
 
   useLayoutEffect(() => {
     const rect = menuRef.current?.getBoundingClientRect();
@@ -133,7 +145,11 @@ export function ContextMenu({
         onClose();
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (e.target instanceof Element && e.target.matches("input, textarea, select")) return;
+        if (
+          e.target instanceof Element &&
+          e.target.matches("input, textarea, select")
+        )
+          return;
         const controls = Array.from(
           menuRef.current?.querySelectorAll<HTMLButtonElement>(
             "button:not(:disabled)",
@@ -222,10 +238,25 @@ export function ContextMenu({
       </div>
       {hasSelection ? (
         <>
-          {state.cellKey && <div className="context-table-scope"><span>{t("inspector.cell")} {state.cellKey.split(":").map((part) => Number(part) + 1).join(", ")}</span><button type="button" onClick={onTableScope}>{t("inspector.wholeTable")}</button></div>}
+          {state.cellKey && (
+            <div className="context-table-scope">
+              <span>
+                {t("inspector.cell")}{" "}
+                {state.cellKey
+                  .split(":")
+                  .map((part) => Number(part) + 1)
+                  .join(", ")}
+              </span>
+              <button type="button" onClick={onTableScope}>
+                {t("inspector.wholeTable")}
+              </button>
+            </div>
+          )}
           {singleArrow && (
             <div className="context-section connector-description">
-              <label htmlFor="connector-description">{t("inspector.arrowLabel")}</label>
+              <label htmlFor="connector-description">
+                {t("inspector.arrowLabel")}
+              </label>
               <input
                 id="connector-description"
                 autoFocus
@@ -233,20 +264,77 @@ export function ContextMenu({
                 maxLength={120}
                 placeholder={t("inspector.arrowLabelPlaceholder")}
                 value={singleArrow.data.label ?? ""}
-                onChange={(event) => { onUpdateLabel(singleArrow.id, event.target.value); }}
+                onChange={(event) => {
+                  onUpdateLabel(singleArrow.id, event.target.value);
+                }}
               />
               <p>{t("inspector.arrowLabelHint")}</p>
             </div>
           )}
-        <NodeStylePanel nodes={nodes.map(node => ({
-          ...node,
-          style: node.type === "arrow"
-            ? { ...node.style, strokeColor: connectorAppearance(node.style.strokeColor ?? "#64748b", theme) }
-            : nodeAppearance(node.style, theme),
-        }))} onUpdateStyle={onUpdateStyle} />
+          {organization}
+          {nodes.some((node) => node.type !== "group") && (
+            <NodeStylePanel
+              nodes={nodes
+                .filter((node) => node.type !== "group")
+                .map((node) => ({
+                  ...node,
+                  style:
+                    node.type === "freehand"
+                      ? {
+                          ...node.style,
+                          strokeColor: freehandColor(node, theme),
+                        }
+                      : node.type === "arrow"
+                        ? {
+                            ...node.style,
+                            strokeColor: connectorAppearance(
+                              node.style.strokeColor ?? "#64748b",
+                              theme,
+                            ),
+                          }
+                        : nodeAppearance(node.style, theme),
+                }))}
+              onUpdateStyle={onUpdateStyle}
+            />
+          )}
           <div className="context-section context-actions">
-            {nodes.length === 1 && nodes[0] && nodes[0].type !== "arrow" && action(t(typeof nodes[0].note === "string" ? "note.edit" : "note.add"), FileText, () => { const node = nodes[0]; if (node) onEditNote(node.id); })}
-            {nodes.length === 1 && nodes[0] && typeof nodes[0].note === "string" && nodes[0].type !== "markdown" && action(t("note.remove"), X, () => { const node = nodes[0]; if (node) onRemoveNote(node.id); })}
+            {action(t("clipboard.copy"), Copy, () => {
+              onClose();
+              window.dispatchEvent(new Event("talweg:copy"));
+            })}
+            {action(t("clipboard.cut"), Scissors, () => {
+              onClose();
+              window.dispatchEvent(new Event("talweg:cut"));
+            })}
+            {action(t("clipboard.paste"), ClipboardPaste, () => {
+              onClose();
+              window.dispatchEvent(new Event("talweg:paste"));
+            })}
+            {action(t("clipboard.export"), Download, () => {
+              onClose();
+              window.dispatchEvent(new Event("talweg:export-fragment"));
+            })}
+            {nodes.length === 1 &&
+              nodes[0] &&
+              nodes[0].type !== "arrow" &&
+              nodes[0].type !== "group" &&
+              nodes[0].type !== "freehand" &&
+              action(
+                t(typeof nodes[0].note === "string" ? "note.edit" : "note.add"),
+                FileText,
+                () => {
+                  const node = nodes[0];
+                  if (node) onEditNote(node.id);
+                },
+              )}
+            {nodes.length === 1 &&
+              nodes[0] &&
+              typeof nodes[0].note === "string" &&
+              nodes[0].type !== "markdown" &&
+              action(t("note.remove"), X, () => {
+                const node = nodes[0];
+                if (node) onRemoveNote(node.id);
+              })}
             {nodes.some((node) => node.type !== "arrow") &&
               action(t("inspector.duplicate"), Copy, onDuplicate)}
             <div className="context-action-pair">
@@ -269,6 +357,12 @@ export function ContextMenu({
         </>
       ) : (
         <>
+          <div className="context-section context-actions">
+            {action(t("clipboard.paste"), ClipboardPaste, () => {
+              onClose();
+              window.dispatchEvent(new Event("talweg:paste"));
+            })}
+          </div>
           <label className="context-search">
             <Search size={14} />
             <input

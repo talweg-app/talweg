@@ -1,3 +1,5 @@
+import { useNodeLinks, sessionNodeHref } from "./NodeLinks.js";
+import { navigate } from "../routes/router.js";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown, { defaultUrlTransform } from "react-markdown";
@@ -25,6 +27,7 @@ export function NoteEditor({
   onClose,
 }: NoteEditorProps) {
   const { t } = useTranslation();
+  const canvasDocument = useNodeLinks();
   const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [error, setError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -101,15 +104,21 @@ export function NoteEditor({
     const editor = textareaRef.current;
     const start = editor?.selectionStart ?? markdown.length;
     const end = editor?.selectionEnd ?? start;
-    const formula = markdown.slice(start, end) || "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}";
+    const formula =
+      markdown.slice(start, end) || "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}";
     const prefix = start ? "\n\n" : "";
     const suffix = end < markdown.length ? "\n\n" : "\n";
-    onChange(`${markdown.slice(0, start)}${prefix}$$\n${formula}\n$$${suffix}${markdown.slice(end)}`);
+    onChange(
+      `${markdown.slice(0, start)}${prefix}$$\n${formula}\n$$${suffix}${markdown.slice(end)}`,
+    );
     setTab("edit");
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
       const position = start + prefix.length + 3;
-      textareaRef.current?.setSelectionRange(position, position + formula.length);
+      textareaRef.current?.setSelectionRange(
+        position,
+        position + formula.length,
+      );
     });
   };
 
@@ -165,7 +174,12 @@ export function NoteEditor({
             </button>
           </div>
           <div>
-            <button type="button" aria-label={t("note.addFormula")} title={t("note.addFormula")} onClick={addFormula}>
+            <button
+              type="button"
+              aria-label={t("note.addFormula")}
+              title={t("note.addFormula")}
+              onClick={addFormula}
+            >
               <Sigma size={16} />
             </button>
             <button
@@ -238,7 +252,9 @@ export function NoteEditor({
             <Markdown
               skipHtml
               remarkPlugins={[remarkMath]}
-              rehypePlugins={[[rehypeKatex, { trust: false, maxSize: 20, maxExpand: 1000 }]]}
+              rehypePlugins={[
+                [rehypeKatex, { trust: false, maxSize: 20, maxExpand: 1000 }],
+              ]}
               urlTransform={(url) =>
                 url.startsWith("asset:") ||
                 /^data:image\/(png|jpeg|webp|gif);base64,/i.test(url)
@@ -262,7 +278,17 @@ export function NoteEditor({
                     </span>
                   ),
                 a: ({ href, children }) => (
-                  <a href={href} target="_blank" rel="noreferrer">
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => {
+                      if (href?.startsWith("/board/")) {
+                        event.preventDefault();
+                        navigate(sessionNodeHref(href, canvasDocument));
+                      }
+                    }}
+                  >
                     {children}
                   </a>
                 ),

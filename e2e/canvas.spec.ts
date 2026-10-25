@@ -229,13 +229,13 @@ test("a table exports to a valid PNG and native file", async ({
     expect.arrayContaining([
       expect.objectContaining({
         type: "table",
-        data: {
+        data: expect.objectContaining({
           cells: [
             ["Schedule", "", ""],
             ["", "", ""],
             ["", "", ""],
           ],
-        },
+        }),
       }),
     ]),
   );

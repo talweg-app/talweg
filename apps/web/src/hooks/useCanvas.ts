@@ -1,4 +1,29 @@
-import { ProjectStorageAdapter, type LibraryState } from "../utils/projectStorage.js";
+import { copyBoard } from "../utils/copyBoard.js";
+import {
+  upgradeSharedScene,
+  patchSharedMap,
+  editTableCell,
+  resizeSharedTable,
+  changeTableStructure,
+  pasteTableGrid,
+} from "../utils/sharedEditing.js";
+import { useCanvasClipboard } from "./useCanvasClipboard.js";
+import { createInvitation, storedInvitation } from "../utils/invitation.js";
+import { PeerSession, type PeerState } from "../utils/peerSession.js";
+import {
+  worldDocument,
+  selectionRoots,
+  groupSelection,
+  ungroupSelection,
+  alignSelection,
+  deleteSelection,
+  duplicateSelection,
+  type Alignment,
+} from "../utils/organizeCanvas.js";
+import {
+  ProjectStorageAdapter,
+  type LibraryState,
+} from "../utils/projectStorage.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
 import {
@@ -38,19 +63,30 @@ import type {
   ToolType,
 } from "../types.js";
 import { getImageDimensions, setCachedAssetUrl } from "../utils/assets.js";
-import { getLinkedFileHandle, type FileSaveState, type NativeFileSystemFileHandle, saveDocumentToFileSystem } from "../utils/fileSystem.js";
+import {
+  getLinkedFileHandle,
+  type FileSaveState,
+  type NativeFileSystemFileHandle,
+  saveDocumentToFileSystem,
+} from "../utils/fileSystem.js";
 import { layoutMindmapTree } from "../utils/mindmap.js";
 import { createId } from "../utils/template.js";
 
 import { firstPageId, pageNodes } from "../utils/pageNodes.js";
-import { promoteTemplateDraft } from "../utils/boardLibrary.js";
+import {
+  markTemplateDraft,
+  promoteTemplateDraft,
+} from "../utils/boardLibrary.js";
 
 const DEFAULT_DOC_ID = "default-doc" as DocumentId;
-const INITIAL_RECONNECT_DELAY_MS = 1000;
-const MAX_RECONNECT_DELAY_MS = 10000;
-const BACKOFF_FACTOR = 1.5;
 
 export interface UseCanvasReturn {
+  collaboration: PeerState;
+  clipboardError: string;
+  startHosting: () => Promise<void>;
+  approvePeer: (id: string, accept: boolean) => void;
+  stopSharing: () => void;
+  saveIndependentCopy: () => Promise<string>;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   document: CanvasDocument | null;
   camera: CameraViewport;
@@ -72,6 +108,10 @@ export interface UseCanvasReturn {
   moveNode: (id: NodeId, deltaX: number, deltaY: number) => void;
   batchMoveNodes: (positions: ReadonlyMap<NodeId, Point2D>) => void;
   deleteSelectedNodes: () => void;
+  groupSelected: () => void;
+  ungroupSelected: () => void;
+  duplicateSelected: () => void;
+  organizeSelected: (alignment: Alignment) => void;
   deleteNode: (id: NodeId) => void;
   connectNodes: (
     sourceId: NodeId,
@@ -116,17 +156,25 @@ export function useCanvas(
   const [camera, setCamera] = useState<CameraViewport>(() => {
     return parseCameraHash() ?? { x: 0, y: 0, zoom: 1.0 };
   });
-  const [activePageId, setActivePageId] = useState<PageId>(initialPageId ?? "page-1");
-  const [selectedNodeIds, setSelectedNodeIds] = useState<ReadonlySet<NodeId>>(new Set());
+  const [activePageId, setActivePageId] = useState<PageId>(
+    initialPageId ?? "page-1",
+  );
+  const activePageRef = useRef(activePageId);
+  activePageRef.current = activePageId;
+  const [selectedNodeIds, setSelectedNodeIds] = useState<ReadonlySet<NodeId>>(
+    new Set(),
+  );
   const [activeTool, setActiveTool] = useState<ToolType>("select");
   const [mode, setMode] = useState<CanvasMode>("whiteboard");
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [adapterState, setAdapterState] = useState<IndexedDBStorageAdapter | null>(null);
+  const [adapterState, setAdapterState] =
+    useState<IndexedDBStorageAdapter | null>(null);
 
   useCameraUrlSync(camera, isLoaded);
 
+  const [clipboardError, setClipboardError] = useState("");
   const [storageError, setStorageError] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [libraryState, setLibraryState] = useState<LibraryState>("browser");
@@ -137,17 +185,31 @@ export function useCanvas(
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const clockRef = useRef(0);
   const pendingDeltasRef = useRef<StorageDelta[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryCountRef = useRef(0);
-  const disposedRef = useRef(false);
+  const [collaboration, setCollaboration] = useState<PeerState>({
+    phase: "off",
+    host: false,
+    room: "",
+  });
+  const peerSessionRef = useRef<PeerSession | null>(null);
+  const guestRoom = new URLSearchParams(window.location.search).get("room");
 
   const cameraRef = useRef<CameraViewport>(camera);
   cameraRef.current = camera;
 
+  useEffect(() => {
+    peerSessionRef.current?.setPresence({
+      pageId: activePageId,
+      x: null,
+      y: null,
+      selected: [...selectedNodeIds],
+    });
+  }, [activePageId, selectedNodeIds, collaboration.phase]);
+
   const initialPageIdRef = useRef(initialPageId);
   initialPageIdRef.current = initialPageId;
 
+  const selectedIdsRef = useRef(selectedNodeIds);
+  selectedIdsRef.current = selectedNodeIds;
   const mouseScreenRef = useRef<Point2D>({
     x: typeof window !== "undefined" ? window.innerWidth / 2 : 0,
     y: typeof window !== "undefined" ? window.innerHeight / 2 : 0,
@@ -156,8 +218,30 @@ export function useCanvas(
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
       mouseScreenRef.current = { x: e.clientX, y: e.clientY };
+      const bounds = viewportRef.current?.getBoundingClientRect();
+      const inside =
+        bounds &&
+        e.clientX >= bounds.left &&
+        e.clientX <= bounds.right &&
+        e.clientY >= bounds.top &&
+        e.clientY <= bounds.bottom;
+      const point = inside
+        ? screenToWorld(
+            { x: e.clientX, y: e.clientY },
+            cameraRef.current,
+            bounds,
+          )
+        : null;
+      peerSessionRef.current?.setPresence({
+        pageId: activePageRef.current,
+        x: point?.x ?? null,
+        y: point?.y ?? null,
+        selected: [...selectedIdsRef.current],
+      });
     };
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
     };
@@ -198,7 +282,12 @@ export function useCanvas(
     setIsLoaded(false);
     setSelectedNodeIds(new Set());
     const storageDisposedRef = { current: false };
-    const adapter = new ProjectStorageAdapter(state => { if (!storageDisposedRef.current) setLibraryState(state); });
+    const sceneDisposed = () => storageDisposedRef.current;
+    const adapter = guestRoom
+      ? new IndexedDBStorageAdapter()
+      : new ProjectStorageAdapter((state) => {
+          if (!storageDisposedRef.current) setLibraryState(state);
+        });
     adapterRef.current = adapter;
 
     async function initializeScene() {
@@ -207,36 +296,93 @@ export function useCanvas(
         if (storageDisposedRef.current) return;
 
         const snapshot = await adapter.loadSnapshot(documentId);
-        const deltas = await adapter.loadDeltas(documentId, snapshot?.clock ?? -1);
+        const deltas = await adapter.loadDeltas(
+          documentId,
+          snapshot?.clock ?? -1,
+        );
 
         const ydoc = createSceneDoc();
         ydocRef.current = ydoc;
 
         try {
           if (snapshot !== null) {
-            Y.applyUpdate(ydoc, snapshot.documentBlob, TRANSACTION_ORIGINS.STORAGE_HYDRATION);
+            Y.applyUpdate(
+              ydoc,
+              snapshot.documentBlob,
+              TRANSACTION_ORIGINS.STORAGE_HYDRATION,
+            );
             for (const delta of deltas) {
               try {
-                Y.applyUpdate(ydoc, delta.updateBlob, TRANSACTION_ORIGINS.STORAGE_HYDRATION);
+                Y.applyUpdate(
+                  ydoc,
+                  delta.updateBlob,
+                  TRANSACTION_ORIGINS.STORAGE_HYDRATION,
+                );
               } catch (deltaErr) {
                 console.warn("[Talweg] Skipping corrupted delta:", deltaErr);
               }
             }
-            clockRef.current = deltas.length > 0 ? (deltas[deltas.length - 1]?.sequenceNumber ?? snapshot.clock) : snapshot.clock;
+            clockRef.current =
+              deltas.length > 0
+                ? (deltas[deltas.length - 1]?.sequenceNumber ?? snapshot.clock)
+                : snapshot.clock;
           } else if (deltas.length > 0) {
             for (const delta of deltas) {
               try {
-                Y.applyUpdate(ydoc, delta.updateBlob, TRANSACTION_ORIGINS.STORAGE_HYDRATION);
+                Y.applyUpdate(
+                  ydoc,
+                  delta.updateBlob,
+                  TRANSACTION_ORIGINS.STORAGE_HYDRATION,
+                );
               } catch (deltaErr) {
                 console.warn("[Talweg] Skipping corrupted delta:", deltaErr);
               }
             }
             clockRef.current = deltas[deltas.length - 1]?.sequenceNumber ?? 0;
-          } else {
-            throw new Error("Project was not found in the library or browser cache");
+          } else if (!guestRoom) {
+            throw new Error(
+              "Project was not found in the library or browser cache",
+            );
           }
         } catch (err) {
-          throw new Error("Stored project is unreadable; the original data has been preserved", { cause: err });
+          throw new Error(
+            "Stored project is unreadable; the original data has been preserved",
+            { cause: err },
+          );
+        }
+
+        if (
+          guestRoom &&
+          snapshot &&
+          sessionStorage.getItem(`talweg-ended:${guestRoom}`)
+        )
+          setCollaboration({ phase: "ended", host: false, room: guestRoom });
+        if (
+          guestRoom &&
+          !(snapshot && sessionStorage.getItem(`talweg-ended:${guestRoom}`))
+        ) {
+          markTemplateDraft(documentId);
+          const invitation = storedInvitation(guestRoom);
+          if (!invitation) {
+            setCollaboration({
+              phase: "unavailable",
+              host: false,
+              room: guestRoom,
+            });
+            throw new Error("Missing invitation");
+          }
+          const session = new PeerSession(
+            ydoc,
+            adapter,
+            { invitation, host: false },
+            (state) => {
+              if (!storageDisposedRef.current) setCollaboration(state);
+            },
+          );
+          peerSessionRef.current = session;
+          if (snapshot) void session.ready.catch(() => undefined);
+          else await session.ready;
+          if (sceneDisposed()) return;
         }
 
         const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
@@ -254,7 +400,11 @@ export function useCanvas(
 
         let initializing = true;
         let fileWriteRunning = false;
-        let pendingFileWrite: { document: CanvasDocument; update: Uint8Array; handle: NativeFileSystemFileHandle } | null = null;
+        let pendingFileWrite: {
+          document: CanvasDocument;
+          update: Uint8Array;
+          handle: NativeFileSystemFileHandle;
+        } | null = null;
         const flushLinkedFile = async () => {
           fileWriteRunning = true;
           try {
@@ -264,28 +414,45 @@ export function useCanvas(
               const scene = createSceneDoc();
               try {
                 Y.applyUpdate(scene, pending.update);
-                await saveDocumentToFileSystem(pending.document, scene, { adapter, linkedHandle: pending.handle, autoSave: true });
-              } finally { scene.destroy(); }
+                await saveDocumentToFileSystem(pending.document, scene, {
+                  adapter,
+                  linkedHandle: pending.handle,
+                  autoSave: true,
+                });
+              } finally {
+                scene.destroy();
+              }
             }
             if (!storageDisposedRef.current) setFileSaveState("file");
           } catch (error) {
             pendingFileWrite = null;
             console.error("[Talweg] Linked file could not be saved", error);
             if (!storageDisposedRef.current) setFileSaveState("error");
-          } finally { fileWriteRunning = false; }
+          } finally {
+            fileWriteRunning = false;
+          }
         };
         ydoc.on("update", (update: Uint8Array, origin: unknown) => {
           const currentDoc = yDocToDocument(ydoc);
           setDocState(currentDoc);
 
-          if (origin === TRANSACTION_ORIGINS.LOCAL_USER || origin === undoManager) {
+          if (
+            origin === TRANSACTION_ORIGINS.LOCAL_USER ||
+            origin === undoManager ||
+            origin === TRANSACTION_ORIGINS.REMOTE_SYNC
+          ) {
             if (!initializing) {
-              promoteTemplateDraft(documentId);
+              if (!guestRoom) promoteTemplateDraft(documentId);
               const handle = getLinkedFileHandle(documentId);
               if (handle) {
-                pendingFileWrite = { document: currentDoc, update: Y.encodeStateAsUpdate(ydoc), handle };
+                pendingFileWrite = {
+                  document: currentDoc,
+                  update: Y.encodeStateAsUpdate(ydoc),
+                  handle,
+                };
                 setFileSaveState("saving");
-                if (!fileWriteRunning) fileWritesRef.current = flushLinkedFile();
+                if (!fileWriteRunning)
+                  fileWritesRef.current = flushLinkedFile();
               }
             }
             clockRef.current += 1;
@@ -298,33 +465,66 @@ export function useCanvas(
             });
             // start the IndexedDB transaction before navigation can discard a timer
             void flushDeltas();
-
-            // Broadcast local edit update to WebSocket room
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(new Uint8Array([2, ...update]));
-            }
           }
         });
 
+        if (guestRoom) {
+          const synced = yDocToDocument(ydoc);
+          await adapter.saveSnapshot({
+            meta: {
+              documentId,
+              name: synced.name,
+              schemaVersion: synced.schemaVersion,
+              createdAt: synced.meta.createdAt,
+              updatedAt: Date.now(),
+              nodeCount: Object.keys(synced.nodes).length,
+            },
+            clock: clockRef.current,
+            documentBlob: Y.encodeStateAsUpdate(ydoc),
+            stateVector: Y.encodeStateVector(ydoc),
+          });
+        }
+        ydoc.transact(() => {
+          upgradeSharedScene(ydoc);
+        }, TRANSACTION_ORIGINS.LOCAL_USER);
         let initialParsedDoc = yDocToDocument(ydoc);
-        const unassigned = Object.values(initialParsedDoc.nodes).filter((node) => !node.pageId);
+        const unassigned = Object.values(initialParsedDoc.nodes).filter(
+          (node) => !node.pageId,
+        );
         if (unassigned.length) {
           const originalPage = firstPageId(initialParsedDoc);
           ydoc.transact(() => {
             for (const node of unassigned) {
-              const source = node.type === "arrow" ? initialParsedDoc.nodes[node.data.sourceId] : undefined;
-              nodesMap.get(node.id)?.set("pageId", source?.pageId ?? originalPage);
+              const source =
+                node.type === "arrow"
+                  ? initialParsedDoc.nodes[node.data.sourceId]
+                  : undefined;
+              nodesMap
+                .get(node.id)
+                ?.set("pageId", source?.pageId ?? originalPage);
             }
           }, TRANSACTION_ORIGINS.LOCAL_USER);
           initialParsedDoc = yDocToDocument(ydoc);
         }
         setDocState(initialParsedDoc);
 
-        if (initialParsedDoc.pages && Object.keys(initialParsedDoc.pages).length > 0) {
-          const requestedPageId = initialPageIdRef.current;
+        if (
+          initialParsedDoc.pages &&
+          Object.keys(initialParsedDoc.pages).length > 0
+        ) {
+          let preferredPage: string | null = null;
+          try {
+            preferredPage = localStorage.getItem(`talweg-page:${documentId}`);
+          } catch {
+            /* the first page remains available without browser storage */
+          }
+          const requestedPageId = initialPageIdRef.current ?? preferredPage;
           if (requestedPageId && initialParsedDoc.pages[requestedPageId]) {
             setActivePageId(requestedPageId);
-          } else if (initialParsedDoc.activePageId && initialParsedDoc.pages[initialParsedDoc.activePageId]) {
+          } else if (
+            initialParsedDoc.activePageId &&
+            initialParsedDoc.pages[initialParsedDoc.activePageId]
+          ) {
             setActivePageId(initialParsedDoc.activePageId);
           } else {
             const firstId = Object.keys(initialParsedDoc.pages)[0] ?? "page-1";
@@ -350,8 +550,12 @@ export function useCanvas(
 
         undoManager.clear();
         updateUndoState();
-        const linkedNodeId = new URLSearchParams(window.location.search).get("node") as NodeId | null;
-        const linkedNode = linkedNodeId ? initialParsedDoc.nodes[linkedNodeId] : undefined;
+        const linkedNodeId = new URLSearchParams(window.location.search).get(
+          "node",
+        ) as NodeId | null;
+        const linkedNode = linkedNodeId
+          ? worldDocument(initialParsedDoc).nodes[linkedNodeId]
+          : undefined;
         if (linkedNodeId && linkedNode) {
           setSelectedNodeIds(new Set([linkedNodeId]));
           if (linkedNode.pageId) setActivePageId(linkedNode.pageId);
@@ -360,20 +564,32 @@ export function useCanvas(
         initializing = false;
         const urlCamera = parseCameraHash();
         if (linkedNode) {
-          setCamera(zoomToBounds(computeGroupBounds([linkedNode]), { width: window.innerWidth, height: window.innerHeight - 56 }, 80, .2, 1.2));
+          setCamera(
+            zoomToBounds(
+              computeGroupBounds([linkedNode]),
+              { width: window.innerWidth, height: window.innerHeight - 56 },
+              80,
+              0.2,
+              1.2,
+            ),
+          );
         } else if (urlCamera) {
           setCamera(urlCamera);
         } else {
-          const openingPage = initialPageIdRef.current ?? initialParsedDoc.activePageId ?? firstPageId(initialParsedDoc);
-          const allNodes = Object.values(pageNodes(initialParsedDoc, openingPage)).filter(
-            (node) => node.type !== "arrow",
-          );
+          const openingPage =
+            initialPageIdRef.current ??
+            initialParsedDoc.activePageId ??
+            firstPageId(initialParsedDoc);
+          const allNodes = Object.values(
+            pageNodes(worldDocument(initialParsedDoc), openingPage),
+          ).filter((node) => node.type !== "arrow");
           if (allNodes.length > 0) {
             const bounds = computeGroupBounds(allNodes);
             if (bounds.width > 0 && bounds.height > 0) {
               const viewportSize = {
                 width: typeof window !== "undefined" ? window.innerWidth : 1200,
-                height: typeof window !== "undefined" ? window.innerHeight - 40 : 800,
+                height:
+                  typeof window !== "undefined" ? window.innerHeight - 40 : 800,
               };
               // small scenes read better above 100% scale, hence the 1.8 ceiling
               setCamera(zoomToBounds(bounds, viewportSize, 60, 0.2, 1.8));
@@ -400,165 +616,88 @@ export function useCanvas(
     return () => {
       storageDisposedRef.current = true;
       void flushDeltas();
+      peerSessionRef.current?.close();
+      peerSessionRef.current = null;
       undoManagerRef.current?.destroy();
       ydocRef.current?.destroy();
       setAdapterState(null);
       adapterRef.current = null;
       void fileWritesRef.current.then(() => adapter.close());
     };
-  }, [documentId, flushDeltas]);
+  }, [documentId, flushDeltas, guestRoom]);
 
   // tab navigation swaps the route page without remounting the board
   useEffect(() => {
-    if (initialPageId) {
+    if (initialPageId && initialPageId !== activePageRef.current) {
       setActivePageId(initialPageId);
       setSelectedNodeIds(new Set());
     }
   }, [initialPageId]);
 
-  // Real-time WebSocket room synchronization with exponential backoff & auto-reconnect
-  useEffect(() => {
-    if (typeof window === "undefined" || !isLoaded) return;
+  const startHosting = useCallback(async () => {
+    const scene = ydocRef.current;
+    const adapter = adapterRef.current;
+    if (!scene || !adapter) return;
+    peerSessionRef.current?.close();
+    const response = await fetch("/api/peer-config").catch(() => null);
+    const config =
+      response?.ok &&
+      response.headers.get("content-type")?.includes("application/json")
+        ? ((await response.json()) as { localRelay?: boolean })
+        : {};
+    const relay = config.localRelay
+      ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/talweg-relay`
+      : undefined;
+    const { invitation, privateKey } = await createInvitation(relay);
+    const session = new PeerSession(
+      scene,
+      adapter,
+      { invitation, privateKey, host: true },
+      setCollaboration,
+    );
+    peerSessionRef.current = session;
+    try {
+      await session.ready;
+    } catch {
+      /* the panel displays the connection error */
+    }
+  }, []);
+  const stopSharing = useCallback(() => {
+    const session = peerSessionRef.current;
+    peerSessionRef.current = null;
+    void session?.end().catch(() => undefined);
+    setCollaboration({ phase: "off", host: false, room: "" });
+  }, []);
 
-    const searchParams = new URLSearchParams(window.location.search);
-    const roomId = searchParams.get("room");
-    if (!roomId) return;
-
-    const ydoc = ydocRef.current;
-    if (!ydoc) return;
-
-    disposedRef.current = false;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/talweg-sync?room=${encodeURIComponent(roomId)}`;
-
-    const scheduleReconnect = () => {
-      if (disposedRef.current) return;
-      if (reconnectTimerRef.current !== null) return;
-
-      const delay = Math.min(
-        INITIAL_RECONNECT_DELAY_MS * Math.pow(BACKOFF_FACTOR, retryCountRef.current),
-        MAX_RECONNECT_DELAY_MS,
-      );
-      retryCountRef.current += 1;
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectTimerRef.current = null;
-        connect();
-      }, delay);
-    };
-
-    const connect = () => {
-      if (disposedRef.current) return;
-
-      if (reconnectTimerRef.current !== null) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-
-      if (wsRef.current) {
-        try {
-          wsRef.current.close();
-        } catch {
-          // ignore
-        }
-        wsRef.current = null;
-      }
-
-      const ws = new WebSocket(wsUrl);
-      ws.binaryType = "arraybuffer";
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (disposedRef.current) {
-          ws.close();
-          return;
-        }
-        retryCountRef.current = 0;
-
-        // 1. Send local state vector to request delta from peers (SYNC_STEP_1)
-        const sv = Y.encodeStateVector(ydoc);
-        ws.send(new Uint8Array([0, ...sv]));
-
-        // 2. Send local state update so new or empty peers receive our nodes (SYNC_STEP_2)
-        const fullUpdate = Y.encodeStateAsUpdate(ydoc);
-        if (fullUpdate.length > 0) {
-          ws.send(new Uint8Array([1, ...fullUpdate]));
-        }
-      };
-
-      ws.onmessage = (event: MessageEvent) => {
-        const data = event.data instanceof ArrayBuffer
-          ? new Uint8Array(event.data)
-          : event.data instanceof Uint8Array
-            ? event.data
-            : null;
-        if (!data || data.length === 0) return;
-
-        // SYNC_STEP_1: Remote peer sent its state vector; reply with diff update
-        if (data[0] === 0) {
-          const remoteVector = data.subarray(1);
-          const diff = Y.encodeStateAsUpdate(ydoc, remoteVector);
-          if (diff.length > 0 && ws.readyState === WebSocket.OPEN) {
-            ws.send(new Uint8Array([1, ...diff]));
-          }
-          return;
-        }
-
-        // SYNC_STEP_2 or SYNC_UPDATE or raw binary update
-        const updateData = (data[0] === 1 || data[0] === 2) ? data.subarray(1) : data;
-        try {
-          Y.applyUpdate(ydoc, updateData, TRANSACTION_ORIGINS.REMOTE_SYNC);
-        } catch {
-          // If untagged state vector was received, reply with diff
-          try {
-            const diff = Y.encodeStateAsUpdate(ydoc, data);
-            if (diff.length > 0 && ws.readyState === WebSocket.OPEN) {
-              ws.send(new Uint8Array([1, ...diff]));
-            }
-          } catch {
-            // ignore invalid packets
-          }
-        }
-      };
-
-      ws.onclose = () => {
-        if (disposedRef.current) return;
-        scheduleReconnect();
-      };
-
-      ws.onerror = () => {
-        if (disposedRef.current) return;
-        scheduleReconnect();
-      };
-    };
-
-    const handleOnline = () => {
-      if (disposedRef.current) return;
-      retryCountRef.current = 0;
-      if (reconnectTimerRef.current !== null) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      connect();
-    };
-
-    window.addEventListener("online", handleOnline);
-    connect();
-
-    return () => {
-      disposedRef.current = true;
-      if (reconnectTimerRef.current !== null) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      window.removeEventListener("online", handleOnline);
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [isLoaded, documentId]);
-
-
+  const saveIndependentCopy = useCallback(async (): Promise<string> => {
+    const scene = ydocRef.current;
+    if (!scene) throw new Error("Board unavailable");
+    const id = `doc-${crypto.randomUUID()}` as DocumentId;
+    const copy = copyBoard(yDocToDocument(scene), id, guestRoom ?? undefined);
+    const copiedScene = createSceneDoc(copy);
+    const storage = new ProjectStorageAdapter();
+    try {
+      await storage.initialize();
+      await storage.saveSnapshot({
+        meta: {
+          documentId: id,
+          name: copy.name,
+          schemaVersion: copy.schemaVersion,
+          createdAt: copy.meta.createdAt,
+          updatedAt: copy.meta.updatedAt,
+          nodeCount: Object.keys(copy.nodes).length,
+        },
+        clock: 0,
+        documentBlob: Y.encodeStateAsUpdate(copiedScene),
+        stateVector: Y.encodeStateVector(copiedScene),
+      });
+      await storage.flush();
+      return `/board/${encodeURIComponent(id)}`;
+    } finally {
+      copiedScene.destroy();
+      await storage.close();
+    }
+  }, [guestRoom]);
 
   const undo = useCallback(() => {
     undoManagerRef.current?.undo();
@@ -568,9 +707,126 @@ export function useCanvas(
     undoManagerRef.current?.redo();
   }, []);
 
+  const editScene = useCallback(
+    (edit: (document: CanvasDocument) => CanvasDocument) => {
+      const ydoc = ydocRef.current;
+      if (!ydoc) return;
+      const before = yDocToDocument(ydoc);
+      const after = edit(before);
+      if (after === before) return;
+      undoManagerRef.current?.stopCapturing();
+      ydoc.transact(() => {
+        const nodes = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
+        for (const id of Object.keys(before.nodes))
+          if (!after.nodes[id as NodeId]) nodes.delete(id);
+        for (const node of Object.values(after.nodes)) {
+          const previous = before.nodes[node.id];
+          if (node === previous) continue;
+          let entry = nodes.get(node.id);
+          if (!entry) {
+            entry = new Y.Map<unknown>();
+            nodes.set(node.id, entry);
+          }
+          for (const [key, value] of Object.entries(
+            node as unknown as Record<string, unknown>,
+          )) {
+            if (
+              value !== undefined &&
+              JSON.stringify(value) !==
+                JSON.stringify(
+                  (
+                    previous as unknown as Record<string, unknown> | undefined
+                  )?.[key],
+                )
+            )
+              patchSharedMap(entry, { [key]: value });
+          }
+          entry.set("updatedAt", Date.now());
+        }
+        if (
+          JSON.stringify(before.rootNodeIds) !==
+          JSON.stringify(after.rootNodeIds)
+        ) {
+          const order = ydoc.getArray<string>(SCENE_ROOT_ORDER_KEY);
+          order.delete(0, order.length);
+          order.push([...after.rootNodeIds]);
+        }
+        upgradeSharedScene(ydoc);
+      }, TRANSACTION_ORIGINS.LOCAL_USER);
+      undoManagerRef.current?.stopCapturing();
+    },
+    [],
+  );
+
+  useCanvasClipboard({
+    document: docState,
+    selected: selectedNodeIds,
+    page: activePageId,
+    adapter: adapterState,
+    edit: editScene,
+    select: setSelectedNodeIds,
+    error: setClipboardError,
+    point: () => {
+      const bounds = viewportRef.current?.getBoundingClientRect();
+      const pointer = mouseScreenRef.current;
+      if (bounds)
+        return screenToWorld(
+          pointer.x >= bounds.left &&
+            pointer.x <= bounds.right &&
+            pointer.y >= bounds.top &&
+            pointer.y <= bounds.bottom
+            ? pointer
+            : {
+                x: bounds.left + bounds.width / 2,
+                y: bounds.top + bounds.height / 2,
+              },
+          cameraRef.current,
+          bounds,
+        );
+      return { x: 0, y: 0 };
+    },
+  });
+
+  const groupSelected = useCallback(() => {
+    editScene((current) => {
+      const id = createId("group");
+      const next = groupSelection(current, selectedNodeIds, id, "");
+      if (next !== current) setSelectedNodeIds(new Set([id]));
+      return next;
+    });
+  }, [editScene, selectedNodeIds]);
+  const ungroupSelected = useCallback(() => {
+    editScene((current) => {
+      const children = [...selectedNodeIds].flatMap((id) => {
+        const node = current.nodes[id];
+        return node?.type === "group" ? [...node.data.childIds] : [id];
+      });
+      const next = ungroupSelection(current, selectedNodeIds);
+      setSelectedNodeIds(new Set(children));
+      return next;
+    });
+  }, [editScene, selectedNodeIds]);
+  const duplicateSelected = useCallback(() => {
+    editScene((current) => {
+      const next = duplicateSelection(current, selectedNodeIds, createId);
+      setSelectedNodeIds(next.selected);
+      return next.document;
+    });
+  }, [editScene, selectedNodeIds]);
+  const organizeSelected = useCallback(
+    (alignment: Alignment) => {
+      editScene((current) =>
+        alignSelection(current, selectedNodeIds, alignment),
+      );
+    },
+    [editScene, selectedNodeIds],
+  );
+
   const saveToFile = useCallback(async () => {
     if (!docState || !ydocRef.current) return false;
-    const saved = await saveDocumentToFileSystem(docState, ydocRef.current, { adapter: adapterRef.current });
+    const saved = await saveDocumentToFileSystem(docState, ydocRef.current, {
+      adapter: adapterRef.current,
+    });
     if (saved.success) {
       promoteTemplateDraft(docState.id);
       setFileSaveState(getLinkedFileHandle(docState.id) ? "file" : "browser");
@@ -588,6 +844,7 @@ export function useCanvas(
         pageId: node.pageId ?? activePageId,
       };
 
+      undoManagerRef.current?.stopCapturing();
       ydoc.transact(() => {
         const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
         const rootOrder = ydoc.getArray<string>(SCENE_ROOT_ORDER_KEY);
@@ -601,8 +858,10 @@ export function useCanvas(
 
         nodesMap.set(nodeWithPage.id, nodeMap);
         rootOrder.push([nodeWithPage.id]);
+        upgradeSharedScene(ydoc);
       }, TRANSACTION_ORIGINS.LOCAL_USER);
 
+      undoManagerRef.current?.stopCapturing();
       setSelectedNodeIds(new Set([nodeWithPage.id]));
     },
     [activePageId],
@@ -623,35 +882,37 @@ export function useCanvas(
     return Object.values(docState.pages).sort((a, b) => a.order - b.order);
   }, [docState?.pages, docState?.meta.createdAt, docState?.meta.updatedAt]);
 
-  const selectPage = useCallback((pageId: PageId) => {
-    setActivePageId(pageId);
-    setSelectedNodeIds(new Set());
-    const ydoc = ydocRef.current;
-    if (ydoc) {
-      const metaMap = ydoc.getMap<unknown>(SCENE_META_KEY);
-      ydoc.transact(() => {
-        metaMap.set("activePageId", pageId);
-      }, TRANSACTION_ORIGINS.LOCAL_USER);
-    }
-  }, []);
+  const selectPage = useCallback(
+    (pageId: PageId) => {
+      setActivePageId(pageId);
+      setSelectedNodeIds(new Set());
+      try {
+        localStorage.setItem(`talweg-page:${documentId}`, pageId);
+      } catch {
+        /* navigation remains available without browser storage */
+      }
+    },
+    [documentId],
+  );
 
   const addPage = useCallback((name?: string): PageId => {
     const ydoc = ydocRef.current;
     if (!ydoc) return "page-1";
     const currentDoc = yDocToDocument(ydoc);
-    const existingPages: Record<PageId, CanvasPage> = currentDoc.pages && Object.keys(currentDoc.pages).length > 0
-      ? { ...currentDoc.pages }
-      : {
-          "page-1": {
-            id: "page-1",
-            name: "Page 1",
-            order: 0,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-        };
+    const existingPages: Record<PageId, CanvasPage> =
+      currentDoc.pages && Object.keys(currentDoc.pages).length > 0
+        ? { ...currentDoc.pages }
+        : {
+            "page-1": {
+              id: "page-1",
+              name: "Page 1",
+              order: 0,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          };
     const count = Object.keys(existingPages).length;
-    const newPageId: PageId = `page-${Date.now().toString(36)}`;
+    const newPageId: PageId = `page-${crypto.randomUUID()}`;
     const newPage: CanvasPage = {
       id: newPageId,
       name: name ?? `Page ${String(count + 1)}`,
@@ -662,7 +923,7 @@ export function useCanvas(
     existingPages[newPageId] = newPage;
     const metaMap = ydoc.getMap<unknown>(SCENE_META_KEY);
     ydoc.transact(() => {
-      metaMap.set("pages", toYValue(existingPages));
+      patchSharedMap(metaMap, { pages: existingPages });
       metaMap.set("activePageId", newPageId);
     }, TRANSACTION_ORIGINS.LOCAL_USER);
     setActivePageId(newPageId);
@@ -686,7 +947,7 @@ export function useCanvas(
     };
     const metaMap = ydoc.getMap<unknown>(SCENE_META_KEY);
     ydoc.transact(() => {
-      metaMap.set("pages", toYValue(updatedPages));
+      patchSharedMap(metaMap, { pages: updatedPages });
     }, TRANSACTION_ORIGINS.LOCAL_USER);
   }, []);
 
@@ -702,7 +963,9 @@ export function useCanvas(
         remaining[id] = page;
       }
     }
-    const remainingList = Object.values(remaining).sort((a, b) => a.order - b.order);
+    const remainingList = Object.values(remaining).sort(
+      (a, b) => a.order - b.order,
+    );
     const nextActiveId = remainingList[0]?.id ?? "page-1";
 
     const metaMap = ydoc.getMap<unknown>(SCENE_META_KEY);
@@ -713,7 +976,10 @@ export function useCanvas(
           nodesMap.delete(nodeId);
         }
       }
-      metaMap.set("pages", toYValue(remaining));
+      const sharedPages = metaMap.get("pages");
+      if (sharedPages instanceof Y.Map)
+        for (const id of sharedPages.keys())
+          if (!remaining[id]) sharedPages.delete(id);
       metaMap.set("activePageId", nextActiveId);
     }, TRANSACTION_ORIGINS.LOCAL_USER);
     setActivePageId(nextActiveId);
@@ -729,43 +995,66 @@ export function useCanvas(
       const nodeMap = nodesMap.get(id);
       if (!nodeMap) return;
 
-      for (const [key, value] of Object.entries(updates as Record<string, unknown>)) {
-        if (value !== undefined) {
-          nodeMap.set(key, toYValue(value));
-        }
+      const stored = yDocToDocument(ydoc);
+      const node = stored.nodes[id];
+      const world = worldDocument(stored).nodes[id];
+      const local = { ...updates };
+      if (node && world) {
+        if (updates.x !== undefined) local.x = node.x + updates.x - world.x;
+        if (updates.y !== undefined) local.y = node.y + updates.y - world.y;
       }
+      patchSharedMap(nodeMap, local);
       nodeMap.set("updatedAt", Date.now());
     }, TRANSACTION_ORIGINS.LOCAL_USER);
   }, []);
 
-  const updateNodeData = useCallback((id: NodeId, partialData: Record<string, unknown>) => {
-    const ydoc = ydocRef.current;
-    if (!ydoc) return;
+  const updateNodeData = useCallback(
+    (id: NodeId, partialData: Record<string, unknown>) => {
+      const ydoc = ydocRef.current;
+      if (!ydoc) return;
 
-    ydoc.transact(() => {
-      const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
-      const nodeMap = nodesMap.get(id);
-      if (!nodeMap) return;
+      ydoc.transact(() => {
+        const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
+        const nodeMap = nodesMap.get(id);
+        if (!nodeMap) return;
 
-      const existingData = nodeMap.get("data");
-      if (existingData instanceof Y.Map) {
-        for (const [key, value] of Object.entries(partialData)) {
-          if (value !== undefined) {
-            existingData.set(key, toYValue(value));
-          }
+        const existingData = nodeMap.get("data");
+        const cell = partialData._cell as
+          { row: string; column: string; text: string } | undefined;
+        if (cell) {
+          editTableCell(ydoc, id, cell.row, cell.column, cell.text);
+          return;
         }
-      } else {
-        const dataMap = new Y.Map<unknown>();
-        for (const [key, value] of Object.entries(partialData)) {
-          if (value !== undefined) {
-            dataMap.set(key, toYValue(value));
+        const grid = partialData._grid as
+          { row: string; column: string; text: string } | undefined;
+        if (grid) {
+          try {
+            pasteTableGrid(ydoc, id, grid.row, grid.column, grid.text);
+          } catch {
+            setClipboardError("rangeTooLarge");
           }
+          return;
         }
-        nodeMap.set("data", dataMap);
-      }
-      nodeMap.set("updatedAt", Date.now());
-    }, TRANSACTION_ORIGINS.LOCAL_USER);
-  }, []);
+        const action = partialData._tableAction as
+          { kind: string; id: string } | undefined;
+        if (action) {
+          changeTableStructure(ydoc, id, action);
+          return;
+        }
+        if (Array.isArray(partialData.cells)) {
+          const current = yDocToDocument(ydoc).nodes[id];
+          if (current?.type === "table")
+            resizeSharedTable(ydoc, current, partialData.cells as string[][]);
+          delete partialData.cells;
+        }
+        if (existingData instanceof Y.Map)
+          patchSharedMap(existingData, partialData);
+        else nodeMap.set("data", toYValue(partialData));
+        nodeMap.set("updatedAt", Date.now());
+      }, TRANSACTION_ORIGINS.LOCAL_USER);
+    },
+    [],
+  );
 
   const moveNode = useCallback((id: NodeId, deltaX: number, deltaY: number) => {
     const ydoc = ydocRef.current;
@@ -785,69 +1074,46 @@ export function useCanvas(
     }, TRANSACTION_ORIGINS.LOCAL_USER);
   }, []);
 
-  const batchMoveNodes = useCallback((positions: ReadonlyMap<NodeId, Point2D>) => {
-    const ydoc = ydocRef.current;
-    if (!ydoc) return;
+  const batchMoveNodes = useCallback(
+    (positions: ReadonlyMap<NodeId, Point2D>) => {
+      const ydoc = ydocRef.current;
+      if (!ydoc) return;
 
-    ydoc.transact(() => {
-      const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
-      for (const [id, point] of positions.entries()) {
-        const nodeMap = nodesMap.get(id);
-        if (!nodeMap) continue;
+      ydoc.transact(() => {
+        const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
+        const stored = yDocToDocument(ydoc);
+        const world = worldDocument(stored);
+        for (const node of selectionRoots(stored, new Set(positions.keys()))) {
+          const id = node.id;
+          const point = positions.get(id);
+          const displayed = world.nodes[id];
+          if (!point || !displayed) continue;
+          const nodeMap = nodesMap.get(id);
+          if (!nodeMap) continue;
 
-        nodeMap.set("x", point.x);
-        nodeMap.set("y", point.y);
-      }
-    }, TRANSACTION_ORIGINS.LOCAL_USER);
-  }, []);
-
-  const deleteNode = useCallback((id: NodeId) => {
-    const ydoc = ydocRef.current;
-    if (!ydoc) return;
-
-    ydoc.transact(() => {
-      const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
-      const rootOrder = ydoc.getArray<string>(SCENE_ROOT_ORDER_KEY);
-
-      nodesMap.delete(id);
-      const rootArray = rootOrder.toArray();
-      const index = rootArray.indexOf(id);
-      if (index !== -1) {
-        rootOrder.delete(index, 1);
-      }
-
-      nodesMap.forEach((candidateMap, candidateId) => {
-        if (candidateMap.get("type") === "arrow") {
-          const data = candidateMap.get("data");
-          if (data instanceof Y.Map) {
-            const sourceId: unknown = data.get("sourceId");
-            const targetId: unknown = data.get("targetId");
-            if (sourceId === id || targetId === id) {
-              nodesMap.delete(candidateId);
-              const edgeIndex = rootOrder.toArray().indexOf(candidateId);
-              if (edgeIndex !== -1) {
-                rootOrder.delete(edgeIndex, 1);
-              }
-            }
-          }
+          nodeMap.set("x", node.x + point.x - displayed.x);
+          nodeMap.set("y", node.y + point.y - displayed.y);
         }
-      });
-    }, TRANSACTION_ORIGINS.LOCAL_USER);
+      }, TRANSACTION_ORIGINS.LOCAL_USER);
+    },
+    [],
+  );
 
-    setSelectedNodeIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
+  const deleteNode = useCallback(
+    (id: NodeId) => {
+      editScene((current) => deleteSelection(current, new Set([id])));
+      setSelectedNodeIds(
+        (previous) =>
+          new Set([...previous].filter((selected) => selected !== id)),
+      );
+    },
+    [editScene],
+  );
 
   const deleteSelectedNodes = useCallback(() => {
-    for (const id of selectedNodeIds) {
-      deleteNode(id);
-    }
+    editScene((current) => deleteSelection(current, selectedNodeIds));
     setSelectedNodeIds(new Set());
-  }, [deleteNode, selectedNodeIds]);
+  }, [editScene, selectedNodeIds]);
 
   const connectNodes = useCallback(
     (
@@ -924,7 +1190,9 @@ export function useCanvas(
 
       const endpointKey = endpoint === "source" ? "sourceId" : "targetId";
       const anchorKey = endpoint === "source" ? "sourceAnchor" : "targetAnchor";
-      const oppositeId = dataMap.get(endpoint === "source" ? "targetId" : "sourceId");
+      const oppositeId = dataMap.get(
+        endpoint === "source" ? "targetId" : "sourceId",
+      );
       if (typeof oppositeId === "string" && oppositeId === nodeId) return;
 
       ydoc.transact(() => {
@@ -941,7 +1209,11 @@ export function useCanvas(
     if (!bounds) return;
     setCamera((prev) => {
       const safe = sanitizeCamera(prev);
-      return zoomAtViewportPoint(safe, { x: bounds.width / 2, y: bounds.height / 2 }, target(safe.zoom));
+      return zoomAtViewportPoint(
+        safe,
+        { x: bounds.width / 2, y: bounds.height / 2 },
+        target(safe.zoom),
+      );
     });
   }, []);
 
@@ -959,7 +1231,9 @@ export function useCanvas(
 
   const zoomToFit = useCallback(() => {
     if (!docState) return;
-    const allNodes = Object.values(pageNodes(docState, activePageId)).filter((node) => node.type !== "arrow");
+    const allNodes = Object.values(
+      pageNodes(worldDocument(docState), activePageId),
+    ).filter((node) => node.type !== "arrow");
     if (allNodes.length === 0) return;
 
     const bounds = computeGroupBounds(allNodes);
@@ -967,7 +1241,10 @@ export function useCanvas(
 
     const viewport = viewportRef.current;
     if (!viewport) return;
-    const viewportSize = { width: viewport.clientWidth, height: viewport.clientHeight };
+    const viewportSize = {
+      width: viewport.clientWidth,
+      height: viewport.clientHeight,
+    };
     setCamera(zoomToBounds(bounds, viewportSize, 60, 0.2, 1.8));
   }, [docState, activePageId]);
 
@@ -981,9 +1258,16 @@ export function useCanvas(
   const shouldAutoFrameRef = useRef(parseCameraHash() === null);
 
   useEffect(() => {
-    if (isLoaded && docState && !hasAutoFramedRef.current && shouldAutoFrameRef.current) {
+    if (
+      isLoaded &&
+      docState &&
+      !hasAutoFramedRef.current &&
+      shouldAutoFrameRef.current
+    ) {
       hasAutoFramedRef.current = true;
-      const allNodes = Object.values(pageNodes(docState, activePageId)).filter((node) => node.type !== "arrow");
+      const allNodes = Object.values(
+        pageNodes(worldDocument(docState), activePageId),
+      ).filter((node) => node.type !== "arrow");
       if (allNodes.length > 0) {
         zoomToFit();
       }
@@ -994,7 +1278,8 @@ export function useCanvas(
     (parentId: NodeId) => {
       const ydoc = ydocRef.current;
       if (!docState || !ydoc) return;
-      const parent = docState.nodes[parentId];
+      const displayed = worldDocument(docState);
+      const parent = displayed.nodes[parentId];
       if (!parent) return;
       const parentPage = parent.pageId ?? firstPageId(docState);
 
@@ -1064,7 +1349,7 @@ export function useCanvas(
       const simulatedDoc: CanvasDocument = {
         ...docState,
         nodes: {
-          ...pageNodes(docState, parentPage),
+          ...pageNodes(displayed, parentPage),
           [childId]: childNode,
           [arrowId]: arrowNode,
         },
@@ -1099,8 +1384,16 @@ export function useCanvas(
           if (id === childId) continue;
           const existingMap = nodesMap.get(id);
           if (existingMap instanceof Y.Map) {
-            existingMap.set("x", pos.x);
-            existingMap.set("y", pos.y);
+            const original = docState.nodes[id];
+            const world = displayed.nodes[id];
+            existingMap.set(
+              "x",
+              original && world ? original.x + pos.x - world.x : pos.x,
+            );
+            existingMap.set(
+              "y",
+              original && world ? original.y + pos.y - world.y : pos.y,
+            );
             existingMap.set("updatedAt", timestamp);
           }
         }
@@ -1114,7 +1407,7 @@ export function useCanvas(
   const createMindmapSibling = useCallback(
     (nodeId: NodeId) => {
       if (!docState) return;
-      const node = docState.nodes[nodeId];
+      const node = worldDocument(docState).nodes[nodeId];
       if (!node) return;
 
       let parentId: NodeId | null = null;
@@ -1185,8 +1478,60 @@ export function useCanvas(
       const isInput =
         activeElement instanceof HTMLInputElement ||
         activeElement instanceof HTMLTextAreaElement ||
-        (activeElement instanceof HTMLElement && activeElement.isContentEditable);
+        activeElement instanceof HTMLSelectElement ||
+        (activeElement instanceof HTMLElement &&
+          activeElement.isContentEditable);
 
+      if (isInput && e.key.toLowerCase() !== "s") return;
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === "a" &&
+        !isInput &&
+        docState
+      ) {
+        e.preventDefault();
+        setSelectedNodeIds(
+          new Set(
+            Object.values(pageNodes(docState, activePageId))
+              .filter((node) => node.isVisible)
+              .map((node) => node.id),
+          ),
+        );
+        return;
+      }
+      if (
+        !isInput &&
+        selectedNodeIds.size &&
+        docState &&
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
+      ) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx =
+          e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy =
+          e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        const world = worldDocument(docState);
+        batchMoveNodes(
+          new Map(
+            selectionRoots(world, selectedNodeIds)
+              .filter((node) => node.type !== "arrow" && !node.isLocked)
+              .map((node) => [node.id, { x: node.x + dx, y: node.y + dy }]),
+          ),
+        );
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g" && !isInput) {
+        e.preventDefault();
+        if (e.shiftKey) ungroupSelected();
+        else groupSelected();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && !isInput) {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) {
@@ -1231,7 +1576,15 @@ export function useCanvas(
         }
       }
 
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       switch (e.key.toLowerCase()) {
+        case "escape":
+          setActiveTool("select");
+          setSelectedNodeIds(new Set());
+          break;
+        case "p":
+          setActiveTool("pen");
+          break;
         case "v":
           setActiveTool("select");
           break;
@@ -1254,7 +1607,7 @@ export function useCanvas(
           setActiveTool("diamond");
           break;
         case "t":
-          setActiveTool("capsule");
+          setActiveTool(e.shiftKey ? "capsule" : "text");
           break;
         case "b":
           setActiveTool("cylinder");
@@ -1272,9 +1625,15 @@ export function useCanvas(
     saveToFile,
     deleteSelectedNodes,
     mode,
+    groupSelected,
+    ungroupSelected,
+    duplicateSelected,
     selectedNodeIds,
     createMindmapChild,
     createMindmapSibling,
+    docState,
+    activePageId,
+    batchMoveNodes,
   ]);
 
   const ingestImageFile = useCallback(
@@ -1305,7 +1664,11 @@ export function useCanvas(
         const screenPoint = clientPoint ?? mouseScreenRef.current;
         const bounds = viewportRef.current?.getBoundingClientRect();
         const screenBounds = { x: bounds?.left ?? 0, y: bounds?.top ?? 0 };
-        const worldPoint = screenToWorld(screenPoint, cameraRef.current, screenBounds);
+        const worldPoint = screenToWorld(
+          screenPoint,
+          cameraRef.current,
+          screenBounds,
+        );
 
         const imageId = createId("image");
         const timestamp = Date.now();
@@ -1349,7 +1712,9 @@ export function useCanvas(
       const isInput =
         activeElement instanceof HTMLInputElement ||
         activeElement instanceof HTMLTextAreaElement ||
-        (activeElement instanceof HTMLElement && activeElement.isContentEditable);
+        activeElement instanceof HTMLSelectElement ||
+        (activeElement instanceof HTMLElement &&
+          activeElement.isContentEditable);
 
       if (isInput) return;
 
@@ -1379,7 +1744,9 @@ export function useCanvas(
       const files = e.dataTransfer?.files;
       if (!files || files.length === 0) return;
 
-      const imageFile = Array.from(files).find((f) => f.type.startsWith("image/"));
+      const imageFile = Array.from(files).find((f) =>
+        f.type.startsWith("image/"),
+      );
       if (imageFile) {
         e.preventDefault();
         void ingestImageFile(imageFile, { x: e.clientX, y: e.clientY });
@@ -1397,8 +1764,19 @@ export function useCanvas(
     };
   }, [ingestImageFile]);
 
-  const displayedDocument = useMemo(() => docState ? { ...docState, activePageId } : null, [docState, activePageId]);
+  const displayedDocument = useMemo(
+    () => (docState ? { ...docState, activePageId } : null),
+    [docState, activePageId],
+  );
   return {
+    collaboration,
+    clipboardError,
+    startHosting,
+    approvePeer: (id, accept) => {
+      peerSessionRef.current?.approve(id, accept);
+    },
+    stopSharing,
+    saveIndependentCopy,
     importImage: ingestImageFile,
     viewportRef,
     document: displayedDocument,
@@ -1421,13 +1799,21 @@ export function useCanvas(
     moveNode,
     batchMoveNodes,
     deleteSelectedNodes,
+    groupSelected,
+    ungroupSelected,
+    duplicateSelected,
+    organizeSelected,
     deleteNode,
     connectNodes,
     reconnectArrow,
     undo,
     redo,
     saveToFile,
-    fileSaveState: storageError ? "browser-error" : fileSaveState === "browser" ? libraryState : fileSaveState,
+    fileSaveState: storageError
+      ? "browser-error"
+      : fileSaveState === "browser"
+        ? libraryState
+        : fileSaveState,
     resetZoom,
     zoomIn,
     zoomOut,

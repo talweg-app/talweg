@@ -1,5 +1,13 @@
+import { FreehandRenderer } from "./FreehandRenderer.js";
 import { nodeAppearance } from "../utils/sceneAppearance.js";
-import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type CSSProperties,
+} from "react";
 import type {
   CanvasNode,
   CardStatus,
@@ -11,12 +19,18 @@ import type { StorageAdapter } from "@talweg/storage";
 import { CheckCircle2, Circle, Clock, FileText, Flame } from "lucide-react";
 import { useTheme } from "../hooks/useTheme.js";
 import { canvasBackground } from "../themeContext.js";
-import { ensureTextContrast, resolveFillColor } from "../utils/colorContrast.js";
+import {
+  ensureTextContrast,
+  resolveFillColor,
+} from "../utils/colorContrast.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { StructuredNodeContent } from "./StructuredNodeContent.js";
 import { RichText } from "./RichText.js";
 import { AssetImage } from "./AssetImage.js";
-const NoteEditor = lazy(async () => { const module = await import("./NoteEditor.js"); return { default: module.NoteEditor }; });
+const NoteEditor = lazy(async () => {
+  const module = await import("./NoteEditor.js");
+  return { default: module.NoteEditor };
+});
 
 interface NodeRendererProps {
   node: CanvasNode;
@@ -56,21 +70,35 @@ export function NodeRenderer({
   useEffect(() => {
     if (!isSelected) return;
     const openNote = (event: Event) => {
-      if (event instanceof CustomEvent && event.detail === node.id) setNoteOpen(true);
+      if (event instanceof CustomEvent && event.detail === node.id)
+        setNoteOpen(true);
     };
     window.addEventListener("talweg:edit-note", openNote);
-    return () => { window.removeEventListener("talweg:edit-note", openNote); };
+    return () => {
+      window.removeEventListener("talweg:edit-note", openNote);
+    };
   }, [isSelected, node.id]);
   const closeNote = useCallback(() => {
     setNoteOpen(false);
   }, []);
   if (node.type === "arrow" || node.type === "group") return null;
+  if (node.type === "freehand")
+    return (
+      <FreehandRenderer node={node} selected={isSelected} onSelect={onSelect} />
+    );
   const appearance = nodeAppearance(node.style, theme);
-  const backgroundColor = resolveFillColor(appearance.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"), canvasBackground[theme]);
-  const verticalAlignment = ({ top: "flex-start", middle: "center", bottom: "flex-end" } as const)[appearance.verticalAlign ?? (node.type === "text" ? "top" : "middle")];
+  const backgroundColor = resolveFillColor(
+    appearance.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"),
+    canvasBackground[theme],
+  );
+  const verticalAlignment = (
+    { top: "flex-start", middle: "center", bottom: "flex-end" } as const
+  )[appearance.verticalAlign ?? (node.type === "text" ? "top" : "middle")];
   const typography: CSSProperties = {
-    color:
-      ensureTextContrast(appearance.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"), backgroundColor),
+    color: ensureTextContrast(
+      appearance.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"),
+      backgroundColor,
+    ),
     fontSize: appearance.fontSize ?? 14,
     fontWeight: appearance.fontWeight ?? 400,
     fontFamily: appearance.fontFamily,
@@ -268,7 +296,10 @@ export function NodeRenderer({
         </div>
       )}
       {node.type === "text" && (
-        <div className="node-text" style={{ ...surface, ...typography, alignItems: verticalAlignment }}>
+        <div
+          className="node-text"
+          style={{ ...surface, ...typography, alignItems: verticalAlignment }}
+        >
           {rich("text", node.data.text, t("tools.text"), isEditing)}
         </div>
       )}
@@ -341,18 +372,20 @@ export function NodeRenderer({
         </div>
       )}
       {noteOpen && (
-        <Suspense fallback={null}><NoteEditor
-          node={node}
-          adapter={adapter}
-          onChange={(markdown) => {
-            onUpdateNote(node.id, markdown);
-            if (node.type === "markdown")
-              onUpdateData(node.id, {
-                title: /^#\s+(.+)$/m.exec(markdown)?.[1] ?? "",
-              });
-          }}
-          onClose={closeNote}
-        /></Suspense>
+        <Suspense fallback={null}>
+          <NoteEditor
+            node={node}
+            adapter={adapter}
+            onChange={(markdown) => {
+              onUpdateNote(node.id, markdown);
+              if (node.type === "markdown")
+                onUpdateData(node.id, {
+                  title: /^#\s+(.+)$/m.exec(markdown)?.[1] ?? "",
+                });
+            }}
+            onClose={closeNote}
+          />
+        </Suspense>
       )}
     </div>
   );

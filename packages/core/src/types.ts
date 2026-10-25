@@ -8,6 +8,7 @@ export type FractionalIndex = string;
 export type PageId = string;
 
 export type NodeType =
+  | "freehand"
   | "markdown"
   | "table"
   | "checklist"
@@ -57,7 +58,8 @@ export type StrokeDashStyle = "solid" | "dashed" | "dotted" | "none";
 export type FillPatternStyle = "solid" | "semi" | "pattern" | "none";
 export type TextAlign = "left" | "center" | "right" | "justify";
 export type VerticalAlign = "top" | "middle" | "bottom";
-export type FontWeight = "normal" | "medium" | "semibold" | "bold" | 400 | 500 | 600 | 700;
+export type FontWeight =
+  "normal" | "medium" | "semibold" | "bold" | 400 | 500 | 600 | 700;
 
 export interface NodeStyle {
   fillColor?: string;
@@ -123,6 +125,11 @@ export interface CanvasNodeBase {
   updatedAt: number;
 }
 
+export interface FreehandNode extends CanvasNodeBase {
+  readonly type: "freehand";
+  data: { points: readonly Point2D[] };
+}
+
 export interface RectangleNode extends CanvasNodeBase {
   readonly type: "rectangle";
   data?: {
@@ -143,7 +150,8 @@ export interface StickerNode extends CanvasNodeBase {
   };
 }
 
-export type CardStatus = "todo" | "in_progress" | "done" | "blocked" | (string & {});
+export type CardStatus =
+  "todo" | "in_progress" | "done" | "blocked" | (string & {});
 
 export interface CardTag {
   readonly id: string;
@@ -249,7 +257,12 @@ export interface EllipseNode extends CanvasNodeBase {
 
 export interface TableNode extends CanvasNodeBase {
   readonly type: "table";
-  data: { cells: string[][]; cellStyles?: Record<string, NodeStyle> };
+  data: {
+    cells: string[][];
+    rowIds?: string[];
+    columnIds?: string[];
+    cellStyles?: Record<string, NodeStyle>;
+  };
 }
 
 export interface ChecklistNode extends CanvasNodeBase {
@@ -266,6 +279,7 @@ export interface MarkdownNode extends CanvasNodeBase {
 }
 
 export type CanvasNode =
+  | FreehandNode
   | MarkdownNode
   | EllipseNode
   | TableNode

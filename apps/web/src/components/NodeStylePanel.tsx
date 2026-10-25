@@ -1,5 +1,13 @@
 import type { CanvasNode, NodeStyle } from "@talweg/core";
-import { AlignCenter, AlignLeft, AlignRight, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Check } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  AlignVerticalJustifyStart,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  Check,
+} from "lucide-react";
 import { useTranslation } from "../hooks/useTranslation.js";
 
 const SWATCHES = [
@@ -29,7 +37,8 @@ export function NodeStylePanel({ nodes, onUpdateStyle }: NodeStylePanelProps) {
   const style = node.style;
   const mixed = (key: keyof NodeStyle) =>
     nodes.some((candidate) => candidate.style[key] !== style[key]);
-  const hasSurface = node.type !== "arrow" && node.type !== "image";
+  const hasSurface =
+    node.type !== "arrow" && node.type !== "image" && node.type !== "freehand";
   const colorRow = (
     key: "fillColor" | "strokeColor" | "textColor",
     fallback: string,
@@ -256,13 +265,44 @@ export function NodeStylePanel({ nodes, onUpdateStyle }: NodeStylePanelProps) {
           </div>
         </>
       )}
-      {(["text", "rectangle", "ellipse", "diamond", "capsule", "cylinder"].includes(node.type)) && (
+      {[
+        "text",
+        "rectangle",
+        "ellipse",
+        "diamond",
+        "capsule",
+        "cylinder",
+      ].includes(node.type) && (
         <div className="inspector-row">
           <span>{t("inspector.verticalAlign")}</span>
-          <div className="inspector-segments" role="group" aria-label={t("inspector.verticalAlign")}>
+          <div
+            className="inspector-segments"
+            role="group"
+            aria-label={t("inspector.verticalAlign")}
+          >
             {(["top", "middle", "bottom"] as const).map((align, index) => {
-              const Icon = [AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd][index] ?? AlignVerticalJustifyCenter;
-              return <button key={align} type="button" aria-label={t(`inspector.${align}`)} aria-pressed={(style.verticalAlign ?? (node.type === "text" ? "top" : "middle")) === align} onClick={() => { onUpdateStyle({ verticalAlign: align }); }}><Icon size={14} /></button>;
+              const Icon =
+                [
+                  AlignVerticalJustifyStart,
+                  AlignVerticalJustifyCenter,
+                  AlignVerticalJustifyEnd,
+                ][index] ?? AlignVerticalJustifyCenter;
+              return (
+                <button
+                  key={align}
+                  type="button"
+                  aria-label={t(`inspector.${align}`)}
+                  aria-pressed={
+                    (style.verticalAlign ??
+                      (node.type === "text" ? "top" : "middle")) === align
+                  }
+                  onClick={() => {
+                    onUpdateStyle({ verticalAlign: align });
+                  }}
+                >
+                  <Icon size={14} />
+                </button>
+              );
             })}
           </div>
         </div>

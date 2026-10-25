@@ -1,3 +1,4 @@
+import { worldDocument, groupBounds } from "./organizeCanvas.js";
 import { nodeAppearance, connectorAppearance } from "./sceneAppearance.js";
 import { canvasBackground, type Theme } from "../themeContext.js";
 import {
@@ -20,8 +21,17 @@ export async function exportToPng(
   adapter?: StorageAdapter | null,
   theme: Theme = "dark",
 ): Promise<void> {
-  const visibleNodes = Object.values(pageNodes(document, document.activePageId ?? firstPageId(document))).filter((node) => node.isVisible);
-  const nodes = visibleNodes.filter((node) => node.type !== "arrow");
+  document = worldDocument(document);
+  const visibleNodes = Object.values(
+    pageNodes(document, document.activePageId ?? firstPageId(document)),
+  ).filter((node) => node.isVisible);
+  const nodes = visibleNodes
+    .filter((node) => node.type !== "arrow")
+    .map((node) =>
+      node.type === "group"
+        ? { ...node, ...groupBounds(document, node) }
+        : node,
+    );
   if (nodes.length === 0) return;
   await window.document.fonts.ready;
 
@@ -94,7 +104,10 @@ export async function exportToPng(
     ctx.translate(-originX, -originY);
 
     const path = new Path2D(rendered.lineSvgPath);
-    ctx.strokeStyle = connectorAppearance(arrow.style.strokeColor ?? "#38bdf8", theme);
+    ctx.strokeStyle = connectorAppearance(
+      arrow.style.strokeColor ?? "#38bdf8",
+      theme,
+    );
     ctx.lineWidth = arrow.style.strokeWidth ?? 1.5;
     ctx.setLineDash(
       arrow.style.strokeDash === "dashed"
@@ -112,7 +125,10 @@ export async function exportToPng(
       arrow.style.strokeDash !== "none"
     ) {
       const markerPath = new Path2D(rendered.endMarkerSvg);
-      ctx.fillStyle = connectorAppearance(arrow.style.strokeColor ?? "#38bdf8", theme);
+      ctx.fillStyle = connectorAppearance(
+        arrow.style.strokeColor ?? "#38bdf8",
+        theme,
+      );
       ctx.fill(markerPath);
     }
 
@@ -125,7 +141,13 @@ export async function exportToPng(
     ctx.restore();
   }
 
-  for (const node of [...nodes].sort((a, b) => a.zIndex - b.zIndex)) {
+  for (const node of [...nodes].sort((a, b) =>
+    a.type === "group" && b.type !== "group"
+      ? -1
+      : b.type === "group" && a.type !== "group"
+        ? 1
+        : a.zIndex - b.zIndex,
+  )) {
     ctx.save();
     ctx.translate(
       node.x - originX + node.width / 2,
@@ -133,7 +155,13 @@ export async function exportToPng(
     );
     ctx.rotate((node.rotation * Math.PI) / 180);
     ctx.translate(-node.width / 2, -node.height / 2);
-    drawNode(ctx, { ...node, style: nodeAppearance(node.style, theme) }, images.get(node.id), canvasBackground[theme]);
+    drawNode(
+      ctx,
+      { ...node, style: nodeAppearance(node.style, theme) },
+      images.get(node.id),
+      canvasBackground[theme],
+      theme,
+    );
     ctx.restore();
   }
 

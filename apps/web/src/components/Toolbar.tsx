@@ -6,6 +6,7 @@ import {
   GitBranch,
   Hand,
   Plus,
+  PenLine,
   Type,
   MousePointer2,
   Pill,
@@ -94,33 +95,94 @@ export function Toolbar({
 
   const tools = (() => {
     const baseTools = [
-      { id: "select" as ToolType, label: t("tools.select"), tooltip: t("tooltips.select"), icon: MousePointer2 },
-      { id: "pan" as ToolType, label: t("tools.pan"), tooltip: t("tooltips.pan"), icon: Hand },
+      {
+        id: "select" as ToolType,
+        label: t("tools.select"),
+        tooltip: t("tooltips.select"),
+        icon: MousePointer2,
+      },
+      {
+        id: "pan" as ToolType,
+        label: t("tools.pan"),
+        tooltip: t("tooltips.pan"),
+        icon: Hand,
+      },
+      {
+        id: "pen" as ToolType,
+        label: t("tools.pen"),
+        tooltip: t("tooltips.pen"),
+        icon: PenLine,
+      },
     ];
 
     if (mode === "diagrams") {
       return [
         ...baseTools,
-        { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
-        { id: "diamond" as ToolType, label: t("tools.diamond"), tooltip: t("tooltips.diamond"), icon: Diamond },
-        { id: "capsule" as ToolType, label: t("tools.capsule"), tooltip: t("tooltips.capsule"), icon: Pill },
-        { id: "cylinder" as ToolType, label: t("tools.cylinder"), tooltip: t("tooltips.cylinder"), icon: Database },
-        { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
+        {
+          id: "rectangle" as ToolType,
+          label: t("tools.rectangle"),
+          tooltip: t("tooltips.rectangle"),
+          icon: Square,
+        },
+        {
+          id: "diamond" as ToolType,
+          label: t("tools.diamond"),
+          tooltip: t("tooltips.diamond"),
+          icon: Diamond,
+        },
+        {
+          id: "capsule" as ToolType,
+          label: t("tools.capsule"),
+          tooltip: t("tooltips.capsule"),
+          icon: Pill,
+        },
+        {
+          id: "cylinder" as ToolType,
+          label: t("tools.cylinder"),
+          tooltip: t("tooltips.cylinder"),
+          icon: Database,
+        },
+        {
+          id: "arrow" as ToolType,
+          label: t("tools.arrow"),
+          tooltip: t("tooltips.arrow"),
+          icon: ArrowUpRight,
+        },
       ];
     }
 
     if (mode === "mindmap") {
       return [
         ...baseTools,
-        { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
-        { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
+        {
+          id: "rectangle" as ToolType,
+          label: t("tools.rectangle"),
+          tooltip: t("tooltips.rectangle"),
+          icon: Square,
+        },
+        {
+          id: "arrow" as ToolType,
+          label: t("tools.arrow"),
+          tooltip: t("tooltips.arrow"),
+          icon: ArrowUpRight,
+        },
       ];
     }
 
     return [
       ...baseTools,
-      { id: "rectangle" as ToolType, label: t("tools.rectangle"), tooltip: t("tooltips.rectangle"), icon: Square },
-      { id: "arrow" as ToolType, label: t("tools.arrow"), tooltip: t("tooltips.arrow"), icon: ArrowUpRight },
+      {
+        id: "rectangle" as ToolType,
+        label: t("tools.rectangle"),
+        tooltip: t("tooltips.rectangle"),
+        icon: Square,
+      },
+      {
+        id: "arrow" as ToolType,
+        label: t("tools.arrow"),
+        tooltip: t("tooltips.arrow"),
+        icon: ArrowUpRight,
+      },
     ];
   })();
 
@@ -146,30 +208,68 @@ export function Toolbar({
       {mode === "mindmap" && hasSelection && (
         <>
           <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
-          <ToolbarButton onClick={onAddMindmapChild} label={t("actions.addChild")} tooltip={t("actions.addChild")}>
+          <ToolbarButton
+            onClick={onAddMindmapChild}
+            label={t("actions.addChild")}
+            tooltip={t("actions.addChild")}
+          >
             <CornerDownRight className="w-4 h-4" />
           </ToolbarButton>
-          <ToolbarButton onClick={onAddMindmapSibling} label={t("actions.addSibling")} tooltip={t("actions.addSibling")}>
+          <ToolbarButton
+            onClick={onAddMindmapSibling}
+            label={t("actions.addSibling")}
+            tooltip={t("actions.addSibling")}
+          >
             <GitBranch className="w-4 h-4" />
           </ToolbarButton>
         </>
       )}
 
-      <ToolbarButton onClick={onOpenInsert} label={t("insert.title")} tooltip={t("insert.title")}><Plus className="w-4 h-4" /></ToolbarButton>
-      <ToolbarButton onClick={() => { onSelectTool("text"); }} label={t("tools.text")} tooltip={t("tools.text")} active={activeTool === "text"}><Type className="w-4 h-4" /></ToolbarButton>
+      <ToolbarButton
+        onClick={onOpenInsert}
+        label={t("insert.title")}
+        tooltip={t("insert.title")}
+      >
+        <Plus className="w-4 h-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => {
+          onSelectTool("text");
+        }}
+        label={t("tools.text")}
+        tooltip={t("tooltips.text")}
+        active={activeTool === "text"}
+      >
+        <Type className="w-4 h-4" />
+      </ToolbarButton>
       <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
 
-      <ToolbarButton onClick={onUndo} disabled={!canUndo} label={t("actions.undo")} tooltip={t("tooltips.undo")}>
+      <ToolbarButton
+        onClick={onUndo}
+        disabled={!canUndo}
+        label={t("actions.undo")}
+        tooltip={t("tooltips.undo")}
+      >
         <Undo2 className="w-4 h-4" />
       </ToolbarButton>
-      <ToolbarButton onClick={onRedo} disabled={!canRedo} label={t("actions.redo")} tooltip={t("tooltips.redo")}>
+      <ToolbarButton
+        onClick={onRedo}
+        disabled={!canRedo}
+        label={t("actions.redo")}
+        tooltip={t("tooltips.redo")}
+      >
         <Redo2 className="w-4 h-4" />
       </ToolbarButton>
 
       {hasSelection && (
         <>
           <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
-          <ToolbarButton onClick={onDeleteSelected} danger label={t("tools.delete")} tooltip={t("tooltips.delete")}>
+          <ToolbarButton
+            onClick={onDeleteSelected}
+            danger
+            label={t("tools.delete")}
+            tooltip={t("tooltips.delete")}
+          >
             <Trash2 className="w-4 h-4" />
           </ToolbarButton>
         </>

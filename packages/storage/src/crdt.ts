@@ -1,4 +1,9 @@
-import type { CanvasDocument, CanvasNode, DocumentId, NodeId } from "@talweg/core";
+import type {
+  CanvasDocument,
+  CanvasNode,
+  DocumentId,
+  NodeId,
+} from "@talweg/core";
 import * as Y from "yjs";
 import { TRANSACTION_ORIGINS } from "./types.js";
 
@@ -35,6 +40,8 @@ export function toYValue(value: unknown): unknown {
 }
 
 export function toPlainValue(value: unknown): unknown {
+  if (value instanceof Y.Text) return value.toJSON();
+  if (value instanceof Y.Array) return value.toArray().map(toPlainValue);
   if (value instanceof Y.Map) {
     const record: Record<string, unknown> = {};
 
@@ -54,7 +61,10 @@ export function toPlainValue(value: unknown): unknown {
   return value;
 }
 
-export function applyDocumentToYDoc(document: CanvasDocument, target: Y.Doc): void {
+export function applyDocumentToYDoc(
+  document: CanvasDocument,
+  target: Y.Doc,
+): void {
   const nodes = target.getMap<SceneNodeMap>(SCENE_NODES_KEY);
   const rootOrder = target.getArray<string>(SCENE_ROOT_ORDER_KEY);
   const metadata = target.getMap<unknown>(SCENE_META_KEY);
@@ -93,7 +103,10 @@ export function applyDocumentToYDoc(document: CanvasDocument, target: Y.Doc): vo
   }, TRANSACTION_ORIGINS.STORAGE_HYDRATION);
 }
 
-export function documentToYDoc(document: CanvasDocument, target: Y.Doc = new Y.Doc()): Y.Doc {
+export function documentToYDoc(
+  document: CanvasDocument,
+  target: Y.Doc = new Y.Doc(),
+): Y.Doc {
   applyDocumentToYDoc(document, target);
   return target;
 }
@@ -115,15 +128,31 @@ export function yDocToDocument(document: Y.Doc): CanvasDocument {
   const nodes: Record<NodeId, CanvasNode> = {};
 
   nodesMap.forEach((nodeMap, nodeId) => {
-    nodes[nodeId as NodeId] = toPlainValue(nodeMap) as CanvasNode;
+    const node = toPlainValue(nodeMap) as CanvasNode;
+    if (
+      node.type === "table" &&
+      node.data.rowIds &&
+      node.data.columnIds &&
+      !Array.isArray(node.data.cells)
+    ) {
+      const cells = node.data.cells as unknown as Record<
+        string,
+        Record<string, string>
+      >;
+      node.data.cells = node.data.rowIds.map((row) =>
+        node.data.columnIds!.map((column) => cells[row]?.[column] ?? ""),
+      );
+    }
+    nodes[nodeId as NodeId] = node;
   });
 
   const rawActivePageId = metadata.get("activePageId");
   const rawPages = metadata.get("pages");
-  const activePageId = typeof rawActivePageId === "string" ? rawActivePageId : undefined;
-  const pages = (rawPages !== undefined ? toPlainValue(rawPages) : undefined) as
-    | CanvasDocument["pages"]
-    | undefined;
+  const activePageId =
+    typeof rawActivePageId === "string" ? rawActivePageId : undefined;
+  const pages = (
+    rawPages !== undefined ? toPlainValue(rawPages) : undefined
+  ) as CanvasDocument["pages"] | undefined;
 
   return {
     id: metadata.get("id") as DocumentId,
@@ -131,7 +160,9 @@ export function yDocToDocument(document: Y.Doc): CanvasDocument {
     name: metadata.get("name") as string,
     nodes,
     rootNodeIds: rootOrder.toArray() as NodeId[],
-    viewport: toPlainValue(metadata.get("viewport")) as CanvasDocument["viewport"],
+    viewport: toPlainValue(
+      metadata.get("viewport"),
+    ) as CanvasDocument["viewport"],
     grid: toPlainValue(metadata.get("grid")) as CanvasDocument["grid"],
     meta: toPlainValue(metadata.get("meta")) as CanvasDocument["meta"],
     ...(activePageId !== undefined ? { activePageId } : {}),

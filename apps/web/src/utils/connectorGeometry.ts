@@ -245,8 +245,14 @@ export function computeConnectorGeometry(
   const resolved = resolveArrow(arrow, document);
   if (!resolved) return null;
 
-  const sourceAnchor = shapeAnchor(resolved.sourceNode, portSlots.get(portKey(arrow.id, "source")) ?? resolved.sourceAnchor);
-  const targetAnchor = shapeAnchor(resolved.targetNode, portSlots.get(portKey(arrow.id, "target")) ?? resolved.targetAnchor);
+  const sourceAnchor = shapeAnchor(
+    resolved.sourceNode,
+    portSlots.get(portKey(arrow.id, "source")) ?? resolved.sourceAnchor,
+  );
+  const targetAnchor = shapeAnchor(
+    resolved.targetNode,
+    portSlots.get(portKey(arrow.id, "target")) ?? resolved.targetAnchor,
+  );
   const sourcePoint = getAnchorPoint(resolved.sourceBox, sourceAnchor);
   const targetPoint = getAnchorPoint(resolved.targetBox, targetAnchor);
   const midpoint: Point2D = {
@@ -283,7 +289,12 @@ export function computeConnectorGeometry(
   const obstacles: BoundingBox[] = [];
 
   for (const node of Object.values(document.nodes)) {
-    if (node.type === "arrow") continue;
+    if (
+      node.type === "arrow" ||
+      node.type === "group" ||
+      node.type === "freehand"
+    )
+      continue;
     if (
       node.id === resolved.sourceNode.id ||
       node.id === resolved.targetNode.id
@@ -309,7 +320,12 @@ export function computeConnectorGeometry(
   const routeMidpoint = connectorLabelPoint(
     waypoints,
     Object.values(document.nodes)
-      .filter((node) => node.type !== "arrow")
+      .filter(
+        (node) =>
+          node.type !== "arrow" &&
+          node.type !== "group" &&
+          node.type !== "freehand",
+      )
       .map(nodeToBoundingBox),
     (arrow.data.label?.length ?? 0) * 7 + 12,
   );

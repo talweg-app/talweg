@@ -9,7 +9,12 @@ export function parseRoute(pathname: string, search = ""): Route {
   const searchParams = new URLSearchParams(search);
   const roomParam = searchParams.get("room");
   if (roomParam) {
-    return { type: "board", boardId: `room-${roomParam}` as DocumentId };
+    const pageMatch = /^\/board\/[^/]+\/page\/([^/]+)\/?$/.exec(pathname);
+    return {
+      type: "board",
+      boardId: `room-${roomParam}` as DocumentId,
+      ...(pageMatch?.[1] ? { pageId: decodeURIComponent(pageMatch[1]) } : {}),
+    };
   }
 
   const docParam = searchParams.get("doc");

@@ -1,3 +1,4 @@
+import { navigate } from "../routes/router.js";
 import {
   useEffect,
   useLayoutEffect,
@@ -11,8 +12,20 @@ import { ensureTextContrast } from "../utils/colorContrast.js";
 import { formatTextRange, normalizeExternalUrl } from "../utils/textRuns.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 
-import { Bold, Italic, Underline, Strikethrough, Link2, Unlink } from "lucide-react";
-import { nodeCaption, nodeHref, useNodeLinks } from "./NodeLinks.js";
+import {
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Link2,
+  Unlink,
+} from "lucide-react";
+import {
+  nodeCaption,
+  nodeHref,
+  useNodeLinks,
+  sessionNodeHref,
+} from "./NodeLinks.js";
 
 interface RichTextProps {
   text: string;
@@ -27,6 +40,7 @@ interface RichTextProps {
   backgroundColor?: string;
   onCommit: (text: string, runs: TextRun[]) => void;
   onBlur?: (() => void) | undefined;
+  onPasteGrid?: ((text: string) => boolean) | undefined;
 }
 
 function readRuns(element: HTMLElement): TextRun[] {
@@ -49,10 +63,12 @@ function readRuns(element: HTMLElement): TextRun[] {
     const next = { ...format };
     if (node.dataset.textColor) next.color = node.dataset.textColor;
     for (const key of ["bold", "italic", "underline", "strike"] as const) {
-      if (node.dataset[key] !== undefined) next[key] = node.dataset[key] === "true";
+      if (node.dataset[key] !== undefined)
+        next[key] = node.dataset[key] === "true";
     }
     if (node.dataset.fontSize) next.fontSize = Number(node.dataset.fontSize);
-    if (node instanceof HTMLAnchorElement) next.href = node.getAttribute("href") ?? "";
+    if (node instanceof HTMLAnchorElement)
+      next.href = node.getAttribute("href") ?? "";
     node.childNodes.forEach((child) => {
       visit(child, next);
     });
@@ -80,6 +96,7 @@ export function RichText({
   backgroundColor,
   onCommit,
   onBlur,
+  onPasteGrid,
 }: RichTextProps) {
   const { t } = useTranslation();
   const canvasDocument = useNodeLinks();
@@ -106,7 +123,11 @@ export function RichText({
         ...content
           .filter((run) => run.text)
           .map((run) => {
-            const safeHref = run.href && (run.href.startsWith("/board/") || /^https?:\/\//.test(run.href)) ? run.href : "";
+            const safeHref =
+              run.href &&
+              (run.href.startsWith("/board/") || /^https?:\/\//.test(run.href))
+                ? run.href
+                : "";
             const span = document.createElement(safeHref ? "a" : "span");
             if (safeHref) {
               span.setAttribute("href", safeHref);
@@ -120,13 +141,29 @@ export function RichText({
               span.style.color = run.color;
               span.dataset.textColor = run.color;
             }
-            for (const key of ["bold", "italic", "underline", "strike"] as const) {
+            for (const key of [
+              "bold",
+              "italic",
+              "underline",
+              "strike",
+            ] as const) {
               if (run[key] !== undefined) span.dataset[key] = String(run[key]);
             }
-            if (run.bold !== undefined) span.style.fontWeight = run.bold ? "700" : "400";
-            if (run.italic !== undefined) span.style.fontStyle = run.italic ? "italic" : "normal";
-            if (run.underline || run.strike) span.style.textDecoration = [run.underline ? "underline" : "", run.strike ? "line-through" : ""].filter(Boolean).join(" ");
-            if (run.fontSize) { span.style.fontSize = `${String(run.fontSize)}px`; span.dataset.fontSize = String(run.fontSize); }
+            if (run.bold !== undefined)
+              span.style.fontWeight = run.bold ? "700" : "400";
+            if (run.italic !== undefined)
+              span.style.fontStyle = run.italic ? "italic" : "normal";
+            if (run.underline || run.strike)
+              span.style.textDecoration = [
+                run.underline ? "underline" : "",
+                run.strike ? "line-through" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+            if (run.fontSize) {
+              span.style.fontSize = `${String(run.fontSize)}px`;
+              span.dataset.fontSize = String(run.fontSize);
+            }
             return span;
           }),
       );
@@ -145,7 +182,8 @@ export function RichText({
           if (started && selection.end <= offset + length) {
             range.setEnd(cursor, Math.max(0, selection.end - offset));
             const selected = window.getSelection();
-            selected?.removeAllRanges(); selected?.addRange(range);
+            selected?.removeAllRanges();
+            selected?.addRange(range);
             break;
           }
           offset += length;
@@ -153,9 +191,14 @@ export function RichText({
         }
       }
     }
-    for (const span of editor.querySelectorAll<HTMLElement>("[data-text-color]")) {
+    for (const span of editor.querySelectorAll<HTMLElement>(
+      "[data-text-color]",
+    )) {
       const color = span.dataset.textColor;
-      if (color) span.style.color = backgroundColor ? ensureTextContrast(color, backgroundColor) : color;
+      if (color)
+        span.style.color = backgroundColor
+          ? ensureTextContrast(color, backgroundColor)
+          : color;
     }
   }, [content, editing, selection, backgroundColor]);
 
@@ -208,16 +251,24 @@ export function RichText({
   };
   const applyFormat = (format: Partial<Omit<TextRun, "text">>) => {
     if (!selection || !editorRef.current) return;
-    const nextRuns = formatTextRange(readRuns(editorRef.current), selection.start, selection.end, format);
+    const nextRuns = formatTextRange(
+      readRuns(editorRef.current),
+      selection.start,
+      selection.end,
+      format,
+    );
     onCommit(nextRuns.map((run) => run.text).join(""), nextRuns);
   };
   const formatActive = (key: "bold" | "italic" | "underline" | "strike") => {
     if (!selection || !editorRef.current) return false;
     let offset = 0;
-    return readRuns(editorRef.current).filter((run) => {
-      const start = offset; offset += run.text.length;
-      return start < selection.end && offset > selection.start;
-    }).every((run) => run[key]);
+    return readRuns(editorRef.current)
+      .filter((run) => {
+        const start = offset;
+        offset += run.text.length;
+        return start < selection.end && offset > selection.start;
+      })
+      .every((run) => run[key]);
   };
 
   return (
@@ -235,16 +286,34 @@ export function RichText({
         style={style}
         onInput={commit}
         onPointerDown={(event) => {
-          if ((editing || (event.target instanceof Element && event.target.closest("a"))) && event.button === 0) event.stopPropagation();
+          if (
+            (editing ||
+              (event.target instanceof Element && event.target.closest("a"))) &&
+            event.button === 0
+          )
+            event.stopPropagation();
         }}
         onClick={(event) => {
-          if (editing && !event.ctrlKey && !event.metaKey && event.target instanceof Element && event.target.closest("a")) event.preventDefault();
+          const anchor =
+            event.target instanceof Element ? event.target.closest("a") : null;
+          const href = anchor?.getAttribute("href");
+          if (
+            href?.startsWith("/board/") &&
+            (!editing || event.ctrlKey || event.metaKey)
+          ) {
+            event.preventDefault();
+            navigate(sessionNodeHref(href, canvasDocument));
+          } else if (editing && !event.ctrlKey && !event.metaKey && anchor)
+            event.preventDefault();
         }}
         onPointerUp={captureSelection}
         onKeyUp={captureSelection}
         onBlur={(event) => {
           commit();
-          if (event.relatedTarget instanceof Element && !event.relatedTarget.closest(".text-selection-toolbar")) {
+          if (
+            event.relatedTarget instanceof Element &&
+            !event.relatedTarget.closest(".text-selection-toolbar")
+          ) {
             setSelection(null);
             onBlur?.();
           } else if (!selection) onBlur?.();
@@ -252,7 +321,8 @@ export function RichText({
         onContextMenu={(event) => {
           const selected = window.getSelection();
           if (
-            editing && selected &&
+            editing &&
+            selected &&
             !selected.isCollapsed &&
             editorRef.current?.contains(selected.anchorNode)
           ) {
@@ -262,9 +332,18 @@ export function RichText({
           }
         }}
         onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && ["b", "i", "u"].includes(event.key.toLowerCase())) {
-            event.preventDefault(); event.stopPropagation();
-            const key = event.key.toLowerCase() === "b" ? "bold" : event.key.toLowerCase() === "i" ? "italic" : "underline";
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            ["b", "i", "u"].includes(event.key.toLowerCase())
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            const key =
+              event.key.toLowerCase() === "b"
+                ? "bold"
+                : event.key.toLowerCase() === "i"
+                  ? "italic"
+                  : "underline";
             applyFormat({ [key]: !formatActive(key) });
           }
           if (!multiline && event.key === "Enter") {
@@ -277,13 +356,18 @@ export function RichText({
             event.preventDefault();
             event.stopPropagation();
             const selected = window.getSelection();
-            if (selected?.rangeCount && editorRef.current?.contains(selected.anchorNode)) selected.collapseToEnd();
+            if (
+              selected?.rangeCount &&
+              editorRef.current?.contains(selected.anchorNode)
+            )
+              selected.collapseToEnd();
             setSelection(null);
             onBlur?.();
           }
         }}
         onPaste={(event) => {
           event.preventDefault();
+          if (onPasteGrid?.(event.clipboardData.getData("text/plain"))) return;
           const selected = window.getSelection();
           if (!selected?.rangeCount) return;
           const range = selected.getRangeAt(0);
@@ -313,40 +397,148 @@ export function RichText({
             }}
           >
             <div className="text-format-actions">
-              {([ ["bold", Bold], ["italic", Italic], ["underline", Underline], ["strike", Strikethrough] ] as const).map(([key, Icon]) => (
-                <button key={key} type="button" className="text-format-button" aria-label={t(`richText.${key}`)} title={t(`richText.${key}`)} aria-pressed={formatActive(key)} onClick={() => { applyFormat({ [key]: !formatActive(key) }); }}><Icon size={14} /></button>
+              {(
+                [
+                  ["bold", Bold],
+                  ["italic", Italic],
+                  ["underline", Underline],
+                  ["strike", Strikethrough],
+                ] as const
+              ).map(([key, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="text-format-button"
+                  aria-label={t(`richText.${key}`)}
+                  title={t(`richText.${key}`)}
+                  aria-pressed={formatActive(key)}
+                  onClick={() => {
+                    applyFormat({ [key]: !formatActive(key) });
+                  }}
+                >
+                  <Icon size={14} />
+                </button>
               ))}
-              <select className="text-format-size" aria-label={t("richText.fontSize")} defaultValue="" onPointerDown={(event) => { event.stopPropagation(); }} onChange={(event) => { applyFormat({ fontSize: Number(event.target.value) }); }}>
-                <option value="" disabled>Aa</option>
-                {[10, 12, 14, 18, 24, 32, 48].map((size) => <option key={size} value={size}>{size}</option>)}
+              <select
+                className="text-format-size"
+                aria-label={t("richText.fontSize")}
+                defaultValue=""
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                onChange={(event) => {
+                  applyFormat({ fontSize: Number(event.target.value) });
+                }}
+              >
+                <option value="" disabled>
+                  Aa
+                </option>
+                {[10, 12, 14, 18, 24, 32, 48].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
               </select>
-              <button type="button" className="text-format-button" aria-label={t("richText.link")} title={t("richText.link")} onClick={() => { setLinkPickerOpen(!linkPickerOpen); }}><Link2 size={14} /></button>
-              <button type="button" className="text-format-button" aria-label={t("richText.unlink")} title={t("richText.unlink")} onClick={() => { applyFormat({ href: "" }); }}><Unlink size={14} /></button>
+              <button
+                type="button"
+                className="text-format-button"
+                aria-label={t("richText.link")}
+                title={t("richText.link")}
+                onClick={() => {
+                  setLinkPickerOpen(!linkPickerOpen);
+                }}
+              >
+                <Link2 size={14} />
+              </button>
+              <button
+                type="button"
+                className="text-format-button"
+                aria-label={t("richText.unlink")}
+                title={t("richText.unlink")}
+                onClick={() => {
+                  applyFormat({ href: "" });
+                }}
+              >
+                <Unlink size={14} />
+              </button>
             </div>
-            {linkPickerOpen && <div className="text-link-options">
-              <form onPointerDown={(event) => { event.stopPropagation(); }} onSubmit={(event) => {
-                event.preventDefault(); event.stopPropagation();
-                const address = normalizeExternalUrl(externalUrl);
-                if (!address) { setLinkError(true); return; }
-                applyFormat({ href: address });
-                setLinkError(false); setLinkPickerOpen(false);
-              }}>
-                <label htmlFor="text-link-url">{t("richText.externalUrl")}</label>
-                <div className="text-link-input-row">
-                  <input id="text-link-url" className="text-link-url" type="text" inputMode="url" placeholder="https://example.com" value={externalUrl} onChange={(event) => { setExternalUrl(event.target.value); setLinkError(false); }} />
-                  <button type="submit">{t("richText.applyLink")}</button>
-                </div>
-                {linkError && <p role="alert">{t("richText.invalidUrl")}</p>}
-              </form>
-              {canvasDocument && <select className="text-node-link-picker" aria-label={t("richText.linkTarget")} defaultValue="" onPointerDown={(event) => { event.stopPropagation(); }} onChange={(event) => {
-              const target = canvasDocument.nodes[event.target.value as keyof typeof canvasDocument.nodes];
-              if (target) applyFormat({ href: nodeHref(canvasDocument, target) });
-              setLinkPickerOpen(false);
-            }}>
-              <option value="" disabled>{t("richText.linkTarget")}</option>
-              {Object.values(canvasDocument.nodes).filter((node) => node.type !== "arrow" && node.type !== "group").map((node) => <option key={node.id} value={node.id}>{canvasDocument.pages?.[node.pageId ?? "page-1"]?.name ?? "Page 1"} · {nodeCaption(node).slice(0, 70)}</option>)}
-            </select>}
-            </div>}
+            {linkPickerOpen && (
+              <div className="text-link-options">
+                <form
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const address = normalizeExternalUrl(externalUrl);
+                    if (!address) {
+                      setLinkError(true);
+                      return;
+                    }
+                    applyFormat({ href: address });
+                    setLinkError(false);
+                    setLinkPickerOpen(false);
+                  }}
+                >
+                  <label htmlFor="text-link-url">
+                    {t("richText.externalUrl")}
+                  </label>
+                  <div className="text-link-input-row">
+                    <input
+                      id="text-link-url"
+                      className="text-link-url"
+                      type="text"
+                      inputMode="url"
+                      placeholder="https://example.com"
+                      value={externalUrl}
+                      onChange={(event) => {
+                        setExternalUrl(event.target.value);
+                        setLinkError(false);
+                      }}
+                    />
+                    <button type="submit">{t("richText.applyLink")}</button>
+                  </div>
+                  {linkError && <p role="alert">{t("richText.invalidUrl")}</p>}
+                </form>
+                {canvasDocument && (
+                  <select
+                    className="text-node-link-picker"
+                    aria-label={t("richText.linkTarget")}
+                    defaultValue=""
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onChange={(event) => {
+                      const target =
+                        canvasDocument.nodes[
+                          event.target
+                            .value as keyof typeof canvasDocument.nodes
+                        ];
+                      if (target)
+                        applyFormat({ href: nodeHref(canvasDocument, target) });
+                      setLinkPickerOpen(false);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {t("richText.linkTarget")}
+                    </option>
+                    {Object.values(canvasDocument.nodes)
+                      .filter(
+                        (node) =>
+                          node.type !== "arrow" && node.type !== "group",
+                      )
+                      .map((node) => (
+                        <option key={node.id} value={node.id}>
+                          {canvasDocument.pages?.[node.pageId ?? "page-1"]
+                            ?.name ?? "Page 1"}{" "}
+                          · {nodeCaption(node).slice(0, 70)}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            )}
             <span>{t("richText.color")}</span>
             {[
               "#eeeeeb",
