@@ -60,3 +60,63 @@ test("pastes a tabular range, expands the table, and persists it", async ({
   await expect(table.locator("td").first()).toHaveText("One");
   await expect(table).toContainText("Eight");
 });
+
+test("middle-button panning cancels native paste over nodes and text editors", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await page.getByRole("button", { name: /^Blank Canvas/ }).click();
+  const canvas = page.getByTestId("canvas");
+  await canvas.click({ button: "right", position: { x: 400, y: 250 } });
+  await page
+    .getByRole("dialog", { name: "Add to canvas", exact: true })
+    .getByRole("button", { name: "Rectangle", exact: true })
+    .click();
+  const node = page.getByTestId("canvas-node");
+  await node.dblclick();
+  await node.getByRole("textbox").fill("Original text");
+  await node.getByRole("textbox").press("Enter");
+  await page.evaluate(() => {
+    window.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button === 1)
+          setTimeout(() => {
+            document.documentElement.dataset.middlePastePrevented = String(
+              event.defaultPrevented,
+            );
+          }, 0);
+      },
+      { capture: true },
+    );
+    return navigator.clipboard.writeText("Clipboard text");
+  });
+  for (const editing of [false, true]) {
+    if (editing) await node.dblclick();
+    const box = await node.boundingBox();
+    if (!box) throw new Error("Missing node");
+    const before = new URL(page.url()).hash;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down({ button: "middle" });
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-middle-paste-prevented",
+      "true",
+    );
+    await page.mouse.move(
+      box.x + box.width / 2 + 100,
+      box.y + box.height / 2 + 60,
+      { steps: 5 },
+    );
+    await page.mouse.up({ button: "middle" });
+    await expect.poll(() => new URL(page.url()).hash).not.toBe(before);
+    await expect(node).toHaveCount(1);
+    await expect(node).toContainText("Original text");
+  }
+  const editor = node.getByRole("textbox");
+  await editor.click();
+  await editor.press("ControlOrMeta+a");
+  await editor.press("ControlOrMeta+v");
+  await expect(editor).toHaveText("Clipboard text");
+});

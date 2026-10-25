@@ -869,7 +869,14 @@ export function Canvas({
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
         backgroundPosition: `${String(gridOffsetX)}px ${String(gridOffsetY)}px`,
       }}
-      onPointerDownCapture={startStroke}
+      onPointerDownCapture={(event) => {
+        // node handlers stop propagation before the canvas can cancel Linux primary paste
+        if (event.button === 1) event.preventDefault();
+        startStroke(event);
+      }}
+      onMouseDownCapture={(event) => {
+        if (event.button === 1) event.preventDefault();
+      }}
       onPointerDown={handlePointerDown}
       onPointerCancel={cancelInteraction}
       onLostPointerCapture={cancelInteraction}
