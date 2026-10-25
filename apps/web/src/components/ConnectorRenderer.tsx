@@ -1,3 +1,5 @@
+import { useTheme } from "../hooks/useTheme.js";
+import { connectorAppearance } from "../utils/sceneAppearance.js";
 import { createPortal } from "react-dom";
 import { useMemo } from "react";
 import type { ArrowNode, CanvasDocument, NodeId } from "@talweg/core";
@@ -27,6 +29,7 @@ export function ConnectorRenderer({
   onHoverArrow,
   onEditLabel,
 }: ConnectorRendererProps) {
+  const { theme } = useTheme();
   const renderedData = useMemo(() => {
     try {
       return computeConnectorGeometry(arrow, document, portSlots);
@@ -37,7 +40,7 @@ export function ConnectorRenderer({
 
   if (!renderedData) return null;
 
-  const strokeColor = arrow.style.strokeColor ?? "#64748b";
+  const strokeColor = connectorAppearance(arrow.style.strokeColor ?? "#64748b", theme);
   const strokeWidth =
     arrow.style.strokeDash === "none" ? 0 : (arrow.style.strokeWidth ?? 1.5);
 

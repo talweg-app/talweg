@@ -1,3 +1,5 @@
+import { useTheme } from "../hooks/useTheme.js";
+import { nodeAppearance, connectorAppearance } from "../utils/sceneAppearance.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
@@ -94,6 +96,7 @@ export function ContextMenu({
   onZoomToFit,
 }: ContextMenuProps) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const menuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState({
@@ -235,7 +238,12 @@ export function ContextMenu({
               <p>{t("inspector.arrowLabelHint")}</p>
             </div>
           )}
-        <NodeStylePanel nodes={nodes} onUpdateStyle={onUpdateStyle} />
+        <NodeStylePanel nodes={nodes.map(node => ({
+          ...node,
+          style: node.type === "arrow"
+            ? { ...node.style, strokeColor: connectorAppearance(node.style.strokeColor ?? "#64748b", theme) }
+            : nodeAppearance(node.style, theme),
+        }))} onUpdateStyle={onUpdateStyle} />
           <div className="context-section context-actions">
             {nodes.length === 1 && nodes[0] && nodes[0].type !== "arrow" && action(t(typeof nodes[0].note === "string" ? "note.edit" : "note.add"), FileText, () => { const node = nodes[0]; if (node) onEditNote(node.id); })}
             {nodes.length === 1 && nodes[0] && typeof nodes[0].note === "string" && nodes[0].type !== "markdown" && action(t("note.remove"), X, () => { const node = nodes[0]; if (node) onRemoveNote(node.id); })}

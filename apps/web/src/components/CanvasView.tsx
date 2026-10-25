@@ -46,6 +46,7 @@ export default function CanvasView({ documentId, pageId, onOpenDashboard }: Canv
     canUndo,
     canRedo,
     isLoaded,
+    loadFailed,
     createMindmapChild,
     createMindmapSibling,
     updateDocumentName,
@@ -56,6 +57,8 @@ export default function CanvasView({ documentId, pageId, onOpenDashboard }: Canv
     renamePage,
     deletePage,
   } = useCanvas(documentId, pageId);
+
+  if (loadFailed) return <div className="app-recovery" role="alert"><div className="app-recovery-content"><h1>{t("library.openFailed")}</h1><p>{t("library.preserved")}</p><div className="app-recovery-actions"><button onClick={onOpenDashboard}>{t("library.back")}</button><button onClick={() => { window.location.reload(); }}>{t("library.retry")}</button></div></div></div>;
 
   if (!isLoaded) {
     return (

@@ -1,3 +1,4 @@
+import { projectLibraryPlugin } from "./server/projectLibrary.js";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { defineConfig, type Plugin } from "vite";
@@ -84,7 +85,7 @@ function talwegSyncPlugin(): Plugin {
 
 export default defineConfig({
   appType: "spa",
-  plugins: [tailwindcss(), react(), talwegSyncPlugin()],
+  plugins: [tailwindcss(), react(), talwegSyncPlugin(), ...(process.env.TALWEG_BROWSER_STORAGE_ONLY === "1" ? [] : [projectLibraryPlugin()])],
   server: {
     port: 5173,
     host: true,

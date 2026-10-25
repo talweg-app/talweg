@@ -76,21 +76,24 @@ test("descriptions are opt-in and can be removed", async ({ page }) => {
   await expect(node.getByRole("button", { name: "Open note", exact: true })).toHaveCount(0);
 });
 
-test("unused templates stay out of the working library; edited boards can be hidden and restored", async ({ page }) => {
+test("blank projects are kept, previews stay out of the library, and working boards can be hidden", async ({ page }) => {
   await blank(page);
   await page.getByRole("button", { name: "Talweg", exact: true }).click();
-  await expect(page.locator(".workspace-board")).toHaveCount(0);
-  await page.getByRole("button", { name: /^Microservices Architecture/ }).click();
-  await page.getByRole("textbox").first().fill("Working plan");
+  await expect(page.locator(".workspace-board")).toHaveCount(1);
+  await page.locator(".workspace-templates").getByRole("button", { name: /^Microservices Architecture/ }).click();
   await page.getByRole("button", { name: "Talweg", exact: true }).click();
   await expect(page.locator(".workspace-board")).toHaveCount(1);
-  await expect(page.locator(".workspace-board")).toContainText("Working plan");
+  await page.locator(".workspace-templates").getByRole("button", { name: /^Microservices Architecture/ }).click();
+  await page.getByRole("textbox").first().fill("Working plan");
+  await page.getByRole("button", { name: "Talweg", exact: true }).click();
+  await expect(page.locator(".workspace-board")).toHaveCount(2);
+  await expect(page.locator(".workspace-board").filter({ hasText: "Working plan" })).toBeVisible();
   await page.getByRole("button", { name: "Hide board Working plan", exact: true }).click();
-  await expect(page.locator(".workspace-board")).toHaveCount(0);
+  await expect(page.locator(".workspace-board")).toHaveCount(1);
   await page.getByRole("button", { name: /Hidden boards/ }).click();
   await page.getByRole("button", { name: "Restore board Working plan", exact: true }).click();
   await page.getByRole("button", { name: "Working boards", exact: true }).click();
-  await expect(page.locator(".workspace-board")).toContainText("Working plan");
+  await expect(page.locator(".workspace-board").filter({ hasText: "Working plan" })).toBeVisible();
 });
 
 test("a selected text fragment links to a node on another page", async ({ page }) => {

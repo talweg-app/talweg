@@ -1,3 +1,4 @@
+import { ProjectStorageAdapter, type LibraryState } from "../utils/projectStorage.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
 import {
@@ -23,7 +24,6 @@ import {
   SCENE_NODES_KEY,
   SCENE_ROOT_ORDER_KEY,
   TRANSACTION_ORIGINS,
-  applyDocumentToYDoc,
   createSceneDoc,
   createSceneUndoManager,
   toYValue,
@@ -40,7 +40,7 @@ import type {
 import { getImageDimensions, setCachedAssetUrl } from "../utils/assets.js";
 import { getLinkedFileHandle, type FileSaveState, type NativeFileSystemFileHandle, saveDocumentToFileSystem } from "../utils/fileSystem.js";
 import { layoutMindmapTree } from "../utils/mindmap.js";
-import { createId, createInitialScene } from "../utils/template.js";
+import { createId } from "../utils/template.js";
 
 import { firstPageId, pageNodes } from "../utils/pageNodes.js";
 import { promoteTemplateDraft } from "../utils/boardLibrary.js";
@@ -61,6 +61,7 @@ export interface UseCanvasReturn {
   canUndo: boolean;
   canRedo: boolean;
   isLoaded: boolean;
+  loadFailed: boolean;
   setCamera: React.Dispatch<React.SetStateAction<CameraViewport>>;
   setActiveTool: (tool: ToolType) => void;
   setMode: (mode: CanvasMode) => void;
@@ -127,6 +128,8 @@ export function useCanvas(
   useCameraUrlSync(camera, isLoaded);
 
   const [storageError, setStorageError] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [libraryState, setLibraryState] = useState<LibraryState>("browser");
   const [fileSaveState, setFileSaveState] = useState<FileSaveState>("browser");
   const fileWritesRef = useRef<Promise<void>>(Promise.resolve());
   const ydocRef = useRef<Y.Doc | null>(null);
@@ -195,7 +198,7 @@ export function useCanvas(
     setIsLoaded(false);
     setSelectedNodeIds(new Set());
     const storageDisposedRef = { current: false };
-    const adapter = new IndexedDBStorageAdapter();
+    const adapter = new ProjectStorageAdapter(state => { if (!storageDisposedRef.current) setLibraryState(state); });
     adapterRef.current = adapter;
 
     async function initializeScene() {
@@ -206,7 +209,7 @@ export function useCanvas(
         const snapshot = await adapter.loadSnapshot(documentId);
         const deltas = await adapter.loadDeltas(documentId, snapshot?.clock ?? -1);
 
-        let ydoc = createSceneDoc();
+        const ydoc = createSceneDoc();
         ydocRef.current = ydoc;
 
         try {
@@ -230,34 +233,10 @@ export function useCanvas(
             }
             clockRef.current = deltas[deltas.length - 1]?.sequenceNumber ?? 0;
           } else {
-            const seed = createInitialScene(documentId);
-            applyDocumentToYDoc(seed, ydoc);
-            const stateVector = Y.encodeStateVector(ydoc);
-            const documentBlob = Y.encodeStateAsUpdate(ydoc);
-
-            await adapter.saveSnapshot({
-              meta: {
-                documentId,
-                name: seed.name,
-                schemaVersion: seed.schemaVersion,
-                createdAt: seed.meta.createdAt,
-                updatedAt: seed.meta.updatedAt,
-                nodeCount: Object.keys(seed.nodes).length,
-              },
-              clock: 0,
-              stateVector,
-              documentBlob,
-            });
-            clockRef.current = 0;
+            throw new Error("Project was not found in the library or browser cache");
           }
         } catch (err) {
-          console.error("[Talweg] Corrupted snapshot in IndexedDB. Re-initializing clean document:", err);
-          ydoc.destroy();
-          ydoc = createSceneDoc();
-          ydocRef.current = ydoc;
-          const seed = createInitialScene(documentId);
-          applyDocumentToYDoc(seed, ydoc);
-          clockRef.current = 0;
+          throw new Error("Stored project is unreadable; the original data has been preserved", { cause: err });
         }
 
         const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
@@ -407,6 +386,7 @@ export function useCanvas(
         }
       } catch (err) {
         console.error("[Talweg] Unexpected error during initialization:", err);
+        if (!storageDisposedRef.current) setLoadFailed(true);
       } finally {
         if (!storageDisposedRef.current) {
           setAdapterState(adapter);
@@ -1430,6 +1410,7 @@ export function useCanvas(
     canUndo,
     canRedo,
     isLoaded,
+    loadFailed,
     setCamera,
     setActiveTool,
     setMode,
@@ -1446,7 +1427,7 @@ export function useCanvas(
     undo,
     redo,
     saveToFile,
-    fileSaveState: storageError ? "browser-error" : fileSaveState,
+    fileSaveState: storageError ? "browser-error" : fileSaveState === "browser" ? libraryState : fileSaveState,
     resetZoom,
     zoomIn,
     zoomOut,

@@ -1,3 +1,4 @@
+import { nodeAppearance, connectorAppearance } from "./sceneAppearance.js";
 import { canvasBackground, type Theme } from "../themeContext.js";
 import {
   type ArrowNode,
@@ -60,7 +61,7 @@ export async function exportToPng(
   const originY = bounds.minY - padding;
 
   // Grid dots
-  ctx.fillStyle = theme === "light" ? "#dce1df" : "#202223";
+  ctx.fillStyle = theme === "light" ? "#dfe1db" : "#202223";
   const gridSize = 24;
   const startX = Math.floor(originX / gridSize) * gridSize;
   const startY = Math.floor(originY / gridSize) * gridSize;
@@ -93,7 +94,7 @@ export async function exportToPng(
     ctx.translate(-originX, -originY);
 
     const path = new Path2D(rendered.lineSvgPath);
-    ctx.strokeStyle = arrow.style.strokeColor ?? "#38bdf8";
+    ctx.strokeStyle = connectorAppearance(arrow.style.strokeColor ?? "#38bdf8", theme);
     ctx.lineWidth = arrow.style.strokeWidth ?? 1.5;
     ctx.setLineDash(
       arrow.style.strokeDash === "dashed"
@@ -111,7 +112,7 @@ export async function exportToPng(
       arrow.style.strokeDash !== "none"
     ) {
       const markerPath = new Path2D(rendered.endMarkerSvg);
-      ctx.fillStyle = arrow.style.strokeColor ?? "#38bdf8";
+      ctx.fillStyle = connectorAppearance(arrow.style.strokeColor ?? "#38bdf8", theme);
       ctx.fill(markerPath);
     }
 
@@ -132,7 +133,7 @@ export async function exportToPng(
     );
     ctx.rotate((node.rotation * Math.PI) / 180);
     ctx.translate(-node.width / 2, -node.height / 2);
-    drawNode(ctx, node, images.get(node.id), canvasBackground[theme]);
+    drawNode(ctx, { ...node, style: nodeAppearance(node.style, theme) }, images.get(node.id), canvasBackground[theme]);
     ctx.restore();
   }
 
@@ -145,7 +146,7 @@ export async function exportToPng(
   for (const item of edgeLabels) {
     const textWidth = ctx.measureText(item.text).width;
     ctx.fillStyle = theme === "light" ? "#ffffff" : "#090a0f";
-    ctx.strokeStyle = theme === "light" ? "#d3d9d7" : "#27272a";
+    ctx.strokeStyle = theme === "light" ? "#dedfd9" : "#27272a";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(
@@ -157,7 +158,7 @@ export async function exportToPng(
     );
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = theme === "light" ? "#505b57" : "#a1a1aa";
+    ctx.fillStyle = theme === "light" ? "#656861" : "#a1a1aa";
     ctx.fillText(item.text, item.x, item.y);
   }
   ctx.restore();

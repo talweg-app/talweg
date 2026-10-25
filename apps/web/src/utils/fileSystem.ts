@@ -54,7 +54,7 @@ function reserveWrite(handle: NativeFileSystemFileHandle): number {
   return next;
 }
 
-export type FileSaveState = "browser" | "file" | "saving" | "error" | "browser-error";
+export type FileSaveState = "library" | "library-saving" | "library-error" | "browser" | "file" | "saving" | "error" | "browser-error";
 
 export function getLinkedFileHandle(documentId: string): NativeFileSystemFileHandle | null {
   return activeFileDocumentId === documentId ? activeFileHandle : null;

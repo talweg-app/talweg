@@ -8,9 +8,11 @@ test.describe.configure({ mode: "serial" });
 let server: ViteDevServer;
 let cache: string;
 let address: string;
+const previousStorageMode = process.env.TALWEG_BROWSER_STORAGE_ONLY;
 const providerPath = resolve("apps/web/src/i18n.tsx");
 
 test.beforeAll(async () => {
+  process.env.TALWEG_BROWSER_STORAGE_ONLY = "1";
   cache = await mkdtemp(join(resolve("apps/web/node_modules"), ".vite-hmr-test-"));
   server = await createServer({
     root: resolve("apps/web"),
@@ -35,6 +37,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  if (previousStorageMode === undefined) delete process.env.TALWEG_BROWSER_STORAGE_ONLY; else process.env.TALWEG_BROWSER_STORAGE_ONLY = previousStorageMode;
   await server?.close();
   if (cache) await rm(cache, { recursive: true, force: true });
 });

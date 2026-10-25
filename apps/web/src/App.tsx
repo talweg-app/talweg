@@ -1,10 +1,10 @@
+import { ProjectStorageAdapter } from "./utils/projectStorage.js";
 import { lazy, Suspense, useEffect } from "react";
 import * as Y from "yjs";
 import type { CanvasDocument, DocumentId } from "@talweg/core";
 import {
   applyDocumentToYDoc,
   createSceneDoc,
-  IndexedDBStorageAdapter,
 } from "@talweg/storage";
 import { WelcomeDashboard } from "./components/WelcomeDashboard.js";
 import { LanguageProvider } from "./i18n.js";
@@ -30,12 +30,12 @@ export function App() {
   };
 
   const handleCreateFromTemplate = async (templateDoc: CanvasDocument) => {
-    markTemplateDraft(templateDoc.id);
+    if (Object.keys(templateDoc.nodes).length > 0) markTemplateDraft(templateDoc.id);
     const tempYdoc = createSceneDoc();
     applyDocumentToYDoc(templateDoc, tempYdoc);
     const stateVector = Y.encodeStateVector(tempYdoc);
     const documentBlob = Y.encodeStateAsUpdate(tempYdoc);
-    const adapter = new IndexedDBStorageAdapter();
+    const adapter = new ProjectStorageAdapter();
     try {
       await adapter.initialize();
       await adapter.saveSnapshot({

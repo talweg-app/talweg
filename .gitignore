@@ -7,3 +7,6 @@ coverage/
 .infoslop
 test-results/
 playwright-report/
+
+# local project library
+/projects/

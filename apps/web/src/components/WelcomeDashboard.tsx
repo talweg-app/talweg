@@ -1,3 +1,5 @@
+import type { LibraryIndex } from "../types/projectLibrary.js";
+import { ProjectStorageAdapter } from "../utils/projectStorage.js";
 import * as Y from "yjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -10,10 +12,11 @@ import {
   ArrowUpRight,
   Plus,
   Layers,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import type { CanvasDocument, DocumentId } from "@talweg/core";
 import {
-  IndexedDBStorageAdapter,
   createSceneDoc,
   yDocToDocument,
   type StorageSnapshot,
@@ -67,7 +70,12 @@ export function WelcomeDashboard({
   const [hiddenBoards, setHiddenBoards] = useState(hiddenBoardIds);
   const [showHidden, setShowHidden] = useState(false);
   const [boardQuery, setBoardQuery] = useState("");
+  const [libraryInfo, setLibraryInfo] = useState<LibraryIndex | null>(null);
+  const [libraryFailed, setLibraryFailed] = useState(false);
+  const [refresh, setRefresh] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -77,10 +85,12 @@ export function WelcomeDashboard({
     let isMounted = true;
     async function fetchBoards() {
       setIsLoading(true);
-      const adapter = new IndexedDBStorageAdapter();
+      setLibraryFailed(false);
+      const adapter = new ProjectStorageAdapter();
       try {
         await adapter.initialize();
         const snapshots = await adapter.listSnapshots();
+        if (isMounted) { setLibraryInfo(adapter.library); setLibraryFailed(adapter.hasPendingWrites); }
         {
           const drafts = templateDraftIds();
           const candidates = snapshots.filter((snapshot) => !drafts.has(snapshot.meta.documentId));
@@ -100,7 +110,7 @@ export function WelcomeDashboard({
           if (isMounted) setRecentBoards(boards);
         }
       } catch {
-        // Fallback silently if storage unavailable
+        if (isMounted) setLibraryFailed(true);
       } finally {
         await adapter.close();
         if (isMounted) setIsLoading(false);
@@ -152,7 +162,15 @@ export function WelcomeDashboard({
       clearTimeout(focusTimer);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, isStandalone, onClose]);
+  }, [isOpen, isStandalone, onClose, refresh]);
+
+  useEffect(() => {
+    const reload = () => { setRefresh(value => value + 1); };
+    window.addEventListener("focus", reload);
+    const hot = (import.meta as ImportMeta & { hot?: { on: (event: string, listener: () => void) => void; off: (event: string, listener: () => void) => void } }).hot;
+    hot?.on("talweg:projects-changed", reload);
+    return () => { window.removeEventListener("focus", reload); hot?.off("talweg:projects-changed", reload); };
+  }, []);
 
   if (!isStandalone && !isOpen) return null;
 
@@ -160,7 +178,7 @@ export function WelcomeDashboard({
     const fileResult = await openDocumentFromFileSystem();
     if (!fileResult) return;
 
-    const adapter = new IndexedDBStorageAdapter();
+    const adapter = new ProjectStorageAdapter();
     try {
       await adapter.initialize();
       const { doc } = await importTalwegDocument(fileResult.text, adapter);
@@ -170,6 +188,21 @@ export function WelcomeDashboard({
     } finally {
       await adapter.close();
     }
+  };
+
+  const handleDelete = async (id: DocumentId, name: string) => {
+    if (!window.confirm(t("dashboard.deleteConfirm").replace("{name}", name))) return;
+    setDeletingId(id);
+    setDeleteError(false);
+    const adapter = new ProjectStorageAdapter();
+    try {
+      await adapter.initialize();
+      await adapter.deleteProject(id);
+      setHiddenBoards(setBoardHidden(id, false));
+      setRecentBoards(boards => boards.filter(board => board.documentId !== id));
+      setRefresh(value => value + 1);
+    } catch { setDeleteError(true); }
+    finally { await adapter.close(); setDeletingId(null); }
   };
 
   const templates = [
@@ -230,6 +263,13 @@ export function WelcomeDashboard({
       </header>
 
       <main className="workspace-content">
+        <section className="project-library-location" aria-label={t("library.title")}>
+          <FolderOpen size={16} aria-hidden="true" />
+          <div><strong>{t(libraryInfo ? "library.connected" : "library.browserOnly")}</strong><span>{libraryInfo ? libraryInfo.directory : t("library.browserHint")}</span></div>
+          <button type="button" onClick={() => { setRefresh(value => value + 1); }} disabled={isLoading}>{t("library.refresh")}</button>
+        </section>
+        {(libraryFailed || Boolean(libraryInfo?.issues.length)) && <p className="library-warning" role="alert">{t("library.issue")}{libraryInfo?.issues.length ? ` ${libraryInfo.issues.join(", ")}` : ""}</p>}
+        {deleteError && <p className="library-warning" role="alert">{t("dashboard.deleteError")}</p>}
         <section className="workspace-intro">
           <div className="workspace-eyebrow"><span />{t("dashboard.eyebrow")}</div>
           <h1 id="welcome-dashboard-title">{t("dashboard.heroTitle")}</h1>
@@ -267,7 +307,7 @@ export function WelcomeDashboard({
             <input type="search" aria-label={t("dashboard.searchBoards")} placeholder={t("dashboard.searchBoards")} value={boardQuery} onChange={(event) => { setBoardQuery(event.target.value); }} />
             <button type="button" onClick={() => { setShowHidden(!showHidden); }}>{t(showHidden ? "dashboard.showBoards" : "dashboard.showHidden")} {showHidden ? "" : `(${String(hiddenBoards.size)})`}</button>
           </div>
-          {isLoading ? (
+          {isLoading && recentBoards.length === 0 ? (
             <div className="workspace-empty" role="status">{t("dashboard.loading")}</div>
           ) : visibleBoards.length === 0 ? (
             <div className="workspace-empty"><Layers size={22} /><p>{t(boardQuery ? "dashboard.noMatches" : showHidden ? "dashboard.noHidden" : "dashboard.noRecent")}</p></div>
@@ -283,13 +323,14 @@ export function WelcomeDashboard({
                     <span className="workspace-board-time"><Clock size={12} />{formatRelativeTime(snapshot.updatedAt, relativeTime, language)}</span>
                     <ArrowUpRight size={16} className="workspace-board-arrow" />
                   </button>
-                  <button className="workspace-board-hide" type="button" aria-label={`${t(showHidden ? "dashboard.restoreBoard" : "dashboard.hideBoard")} ${snapshot.name}`} title={t(showHidden ? "dashboard.restoreBoard" : "dashboard.hideBoard")} onClick={() => { setHiddenBoards(setBoardHidden(snapshot.documentId, !showHidden)); }}><X size={14} /></button></div>
+                  <button className="workspace-board-hide" type="button" aria-label={`${t(showHidden ? "dashboard.restoreBoard" : "dashboard.hideBoard")} ${snapshot.name}`} title={t(showHidden ? "dashboard.restoreBoard" : "dashboard.hideBoard")} disabled={deletingId !== null} onClick={() => { setHiddenBoards(setBoardHidden(snapshot.documentId, !showHidden)); }}>{showHidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+                  <button className="workspace-board-hide workspace-board-delete" type="button" aria-label={`${t("dashboard.deleteBoard")} ${snapshot.name}`} title={t("dashboard.deleteBoard")} disabled={deletingId !== null} onClick={() => { void handleDelete(snapshot.documentId, snapshot.name); }}><X size={14} /></button></div>
                 );
               })}
             </div>
           )}
         </section>
-        <footer className="workspace-footer"><span className="workspace-local-dot" />{t("dashboard.subtitle")}</footer>
+        <footer className="workspace-footer"><span className="workspace-local-dot" />{t(libraryInfo ? "library.footer" : "dashboard.subtitle")}</footer>
       </main>
     </div>
   );

@@ -8,4 +8,4 @@ export const ThemeContext = createContext<{
   setPreference: (value: ThemePreference) => void;
 } | null>(null);
 
-export const canvasBackground = { light: "#f8f9fa", dark: "#101112" };
+export const canvasBackground = { light: "#f7f7f4", dark: "#101112" };

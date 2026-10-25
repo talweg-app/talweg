@@ -1,5 +1,6 @@
 const DRAFTS_KEY = "talweg_template_drafts";
 const HIDDEN_KEY = "talweg_hidden_boards";
+const DELETED_KEY = "talweg_deleted_boards";
 
 function readIds(key: string): string[] {
   try {
@@ -19,6 +20,12 @@ export function promoteTemplateDraft(id: string): void {
   if (drafts.delete(id)) localStorage.setItem(DRAFTS_KEY, JSON.stringify([...drafts]));
 }
 export function hiddenBoardIds(): Set<string> { return new Set(readIds(HIDDEN_KEY)); }
+export function deletedBoardIds(): Set<string> { return new Set(readIds(DELETED_KEY)); }
+export function markBoardDeleted(id: string): void {
+  localStorage.setItem(DELETED_KEY, JSON.stringify([...deletedBoardIds(), id]));
+  setBoardHidden(id, false);
+  promoteTemplateDraft(id);
+}
 export function setBoardHidden(id: string, hidden: boolean): Set<string> {
   const ids = hiddenBoardIds();
   if (hidden) ids.add(id);

@@ -119,7 +119,10 @@
     "restoreBoard": "Restore board",
     "hideBoard": "Hide board",
     "noMatches": "No boards match your search.",
-    "noHidden": "No hidden boards."
+    "noHidden": "No hidden boards.",
+    "deleteBoard": "Delete board",
+    "deleteConfirm": "Delete \"{name}\"? This cannot be undone.",
+    "deleteError": "The project could not be deleted. Check the projects folder and try again."
   },
   "contextMenu": {
     "add": "Add",
@@ -233,12 +236,28 @@
     "saving": "Writing to file…",
     "error": "File error · browser copy kept",
     "chooseHint": "Save once to choose a file and enable automatic writes for this session.",
-    "browser-error": "Browser storage failed · save a file"
+    "browser-error": "Browser storage failed · save a file",
+    "library": "Saved to projects folder",
+    "library-saving": "Saving to projects folder…",
+    "library-error": "Browser copy saved; projects folder needs a retry"
   },
   "theme": {
     "label": "Appearance",
     "light": "Light",
     "dark": "Dark",
     "system": "System"
+  },
+  "library": {
+    "title": "Project library",
+    "connected": "Projects folder",
+    "browserOnly": "Browser storage only",
+    "browserHint": "The shared projects folder is unavailable. Keep a downloaded copy of important boards.",
+    "refresh": "Refresh",
+    "issue": "Some project files could not be opened. Originals have been preserved.",
+    "footer": "Projects are saved as files on this computer and shared across browsers.",
+    "openFailed": "This project could not be opened",
+    "preserved": "Talweg kept the original data. Return to the library or retry when storage is available.",
+    "back": "Back to projects",
+    "retry": "Retry"
   }
 }

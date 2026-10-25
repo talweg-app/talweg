@@ -23,7 +23,7 @@ test("system appearance follows the OS and an explicit choice persists across sc
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await appearance.selectOption("light");
   await blank(page);
-  await expect(page.getByTestId("canvas")).toHaveCSS("background-color", "rgb(248, 249, 250)");
+  await expect(page.getByTestId("canvas")).toHaveCSS("background-color", "rgb(247, 247, 244)");
   await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
   const selectedMode = page.getByTestId("mode-picker-menu").getByText("Whiteboard", { exact: true });
   expect(contrastRatio(await selectedMode.evaluate(element => getComputedStyle(element).color), "#ffffff")).toBeGreaterThanOrEqual(4.5);
@@ -92,7 +92,7 @@ test("text blocks stay legible on white fills, align in both directions and expo
     }
     return { corner: Array.from(context.getImageData(4, 4, 1, 1).data), min: Math.min(...rows), max: Math.max(...rows) };
   }, (await readFile(path)).toString("base64"));
-  expect(pixels.corner).toEqual([248, 249, 250, 255]);
+  expect(pixels.corner).toEqual([247, 247, 244, 255]);
   expect(pixels.min).toBeGreaterThan(35); expect(pixels.max).toBeLessThan(120);
   expect(Math.abs((pixels.min + pixels.max) / 2 - 80)).toBeLessThan(12);
 });
@@ -172,9 +172,55 @@ test("appearance and file controls remain reachable on a narrow canvas", async (
     if (box) { expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(320); }
   }
   await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
-  await expect(page.getByTestId("canvas")).toHaveCSS("background-color", "rgb(248, 249, 250)");
+  await expect(page.getByTestId("canvas")).toHaveCSS("background-color", "rgb(247, 247, 244)");
   await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
   const menu = await page.getByTestId("mode-picker-menu").boundingBox();
   expect(menu).not.toBeNull();
   if (menu) { expect(menu.x).toBeGreaterThanOrEqual(0); expect(menu.x + menu.width).toBeLessThanOrEqual(320); }
+});
+
+test("starter diagrams adapt to paper, retain saved colours and export the light palette", async ({ page }) => {
+  await page.addInitScript(() => { delete (window as Window & { showSaveFilePicker?: unknown }).showSaveFilePicker; });
+  await page.goto("/");
+  await page.locator(".workspace-templates").getByRole("button", { name: /^Microservices Architecture/ }).click();
+  const gateway = page.getByTestId("canvas-node").filter({ hasText: "API Gateway" });
+  const surface = gateway.getByTestId("node-surface");
+  await expect(surface).toHaveCSS("background-color", "rgb(15, 20, 28)");
+  const theme = page.getByRole("combobox", { name: "Appearance", exact: true });
+  await theme.selectOption("light");
+  await expect(surface).toHaveCSS("background-color", "rgb(240, 247, 250)");
+  await expect(surface).toHaveCSS("border-color", "rgb(89, 134, 154)");
+  await gateway.click({ button: "right" });
+  await expect(page.getByRole("dialog", { name: "Appearance", exact: true }).getByRole("textbox", { name: "Fill", exact: true })).toHaveValue("#f0f7fa");
+  await page.keyboard.press("Escape");
+  await theme.selectOption("dark");
+  await expect(surface).toHaveCSS("background-color", "rgb(15, 20, 28)");
+  await expect(surface).toHaveCSS("border-color", "rgb(56, 189, 248)");
+  await theme.selectOption("light");
+  await page.reload();
+  await expect(surface).toHaveCSS("background-color", "rgb(240, 247, 250)");
+  const nativeDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save Document (Ctrl+S)", exact: true }).click();
+  const nativePath = test.info().outputPath("original-colours.talweg");
+  await (await nativeDownload).saveAs(nativePath);
+  const saved = JSON.parse(await readFile(nativePath, "utf8")) as { sceneSnapshot: import("@talweg/core").CanvasDocument };
+  const nodes = Object.values(saved.sceneSnapshot.nodes).filter(node => node.type !== "arrow");
+  const gatewayData = nodes.find(node => node.type === "rectangle" && node.data.label.startsWith("API Gateway"));
+  if (!gatewayData) throw new Error("The exported diagram is missing its gateway");
+  expect(gatewayData.style.fillColor).toBe("#0f141c");
+  expect(gatewayData.style.strokeColor).toBe("#38bdf8");
+  const minX = Math.min(...nodes.map(node => node.x));
+  const minY = Math.min(...nodes.map(node => node.y));
+  const pngDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PNG", exact: true }).click();
+  const pngPath = test.info().outputPath("paper-diagram.png");
+  await (await pngDownload).saveAs(pngPath);
+  const pixel = await page.evaluate(async ({ base64, x, y }) => {
+    const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode();
+    const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
+    const context = canvas.getContext("2d"); if (!context) throw new Error("Canvas is unavailable");
+    context.drawImage(image, 0, 0);
+    return Array.from(context.getImageData(x, y, 1, 1).data);
+  }, { base64: (await readFile(pngPath)).toString("base64"), x: 2 * (gatewayData.x - minX + 60 + gatewayData.width - 15), y: 2 * (gatewayData.y - minY + 75) });
+  expect(pixel).toEqual([240, 247, 250, 255]);
 });

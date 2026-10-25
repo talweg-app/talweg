@@ -1,3 +1,4 @@
+import { nodeAppearance } from "../utils/sceneAppearance.js";
 import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from "react";
 import type {
   CanvasNode,
@@ -64,16 +65,17 @@ export function NodeRenderer({
     setNoteOpen(false);
   }, []);
   if (node.type === "arrow" || node.type === "group") return null;
-  const backgroundColor = resolveFillColor(node.style.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"), canvasBackground[theme]);
-  const verticalAlignment = ({ top: "flex-start", middle: "center", bottom: "flex-end" } as const)[node.style.verticalAlign ?? (node.type === "text" ? "top" : "middle")];
+  const appearance = nodeAppearance(node.style, theme);
+  const backgroundColor = resolveFillColor(appearance.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"), canvasBackground[theme]);
+  const verticalAlignment = ({ top: "flex-start", middle: "center", bottom: "flex-end" } as const)[appearance.verticalAlign ?? (node.type === "text" ? "top" : "middle")];
   const typography: CSSProperties = {
     color:
-      ensureTextContrast(node.style.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"), backgroundColor),
-    fontSize: node.style.fontSize ?? 14,
-    fontWeight: node.style.fontWeight ?? 400,
-    fontFamily: node.style.fontFamily,
+      ensureTextContrast(appearance.textColor ?? (node.type === "sticker" ? "#422006" : "#eeeeeb"), backgroundColor),
+    fontSize: appearance.fontSize ?? 14,
+    fontWeight: appearance.fontWeight ?? 400,
+    fontFamily: appearance.fontFamily,
     textAlign:
-      node.style.textAlign ??
+      appearance.textAlign ??
       (["rectangle", "ellipse", "diamond", "capsule", "cylinder"].includes(
         node.type,
       )
@@ -82,18 +84,18 @@ export function NodeRenderer({
   };
   const surface: CSSProperties = {
     backgroundColor:
-      node.style.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"),
-    borderColor: node.style.strokeColor ?? "#727777",
+      appearance.fillColor ?? (node.type === "sticker" ? "#fef9c3" : "#242729"),
+    borderColor: appearance.strokeColor ?? "#727777",
     borderWidth:
-      node.style.strokeDash === "none" ? 0 : (node.style.strokeWidth ?? 1),
+      appearance.strokeDash === "none" ? 0 : (appearance.strokeWidth ?? 1),
     borderStyle:
-      node.style.strokeDash === "dashed"
+      appearance.strokeDash === "dashed"
         ? "dashed"
-        : node.style.strokeDash === "dotted"
+        : appearance.strokeDash === "dotted"
           ? "dotted"
           : "solid",
     borderRadius:
-      typeof node.style.cornerRadius === "number" ? node.style.cornerRadius : 6,
+      typeof appearance.cornerRadius === "number" ? appearance.cornerRadius : 6,
   };
   const rich = (
     field: string,
@@ -128,16 +130,16 @@ export function NodeRenderer({
     node.type === "capsule" ||
     node.type === "cylinder";
   const strokeDasharray =
-    node.style.strokeDash === "dashed"
+    appearance.strokeDash === "dashed"
       ? "8 5"
-      : node.style.strokeDash === "dotted"
+      : appearance.strokeDash === "dotted"
         ? "2 4"
         : undefined;
   const svgStyle = {
-    fill: node.style.fillColor ?? "#242729",
-    stroke: node.style.strokeColor ?? "#727777",
+    fill: appearance.fillColor ?? "#242729",
+    stroke: appearance.strokeColor ?? "#727777",
     strokeWidth:
-      node.style.strokeDash === "none" ? 0 : (node.style.strokeWidth ?? 1),
+      appearance.strokeDash === "none" ? 0 : (appearance.strokeWidth ?? 1),
     strokeDasharray,
     vectorEffect: "non-scaling-stroke",
   };
@@ -313,7 +315,7 @@ export function NodeRenderer({
       )}
       {(node.type === "table" || node.type === "checklist") && (
         <StructuredNodeContent
-          node={node}
+          node={{ ...node, style: appearance }}
           onUpdateData={onUpdateData}
           onUpdateRuns={onUpdateRuns}
           surfaceStyle={surface}

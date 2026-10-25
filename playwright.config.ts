@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 2,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: "http://localhost:5175",
     channel: "chrome",
     colorScheme: "dark",
     viewport: { width: 1280, height: 900 },
@@ -16,8 +16,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "pnpm dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
+    command: "TALWEG_BROWSER_STORAGE_ONLY=1 pnpm --filter @talweg/web exec vite --port 5175 --strictPort",
+    url: "http://localhost:5175",
+    reuseExistingServer: false,
   },
 });
