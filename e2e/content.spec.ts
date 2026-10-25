@@ -332,3 +332,61 @@ test("connector descriptions can be edited, removed, added again and restored af
   await page.reload();
   await expect(page.getByTestId("connector-label").filter({ hasText: "Dispatch event" })).toBeVisible();
 });
+
+for (const appearance of ["light", "dark"]) {
+  test(`LaTeX formulas render in ${appearance} notes and survive reload and Markdown export`, async ({ canvasPage: page }) => {
+    await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption(appearance);
+    await insert(page, "Markdown note");
+    await page.getByRole("button", { name: "Open note", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Node note", exact: true });
+    const source = "# Quadratic equation\n\nFor $ax^2 + bx + c = 0$, the roots are:\n\n$$\nx = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\n$$";
+    await panel.getByLabel("Markdown text", { exact: true }).fill(source);
+    await panel.getByRole("tab", { name: "Preview", exact: true }).click();
+    await expect(panel.locator(".katex")).toHaveCount(2);
+    await expect(panel.locator(".katex-display")).toBeVisible();
+    await expect(panel.locator(".katex-error")).toHaveCount(0);
+    await expect(panel.locator("math")).toHaveCount(2);
+    const visibleMath = panel.locator(".katex-display .katex-html");
+    await expect(visibleMath).toBeVisible();
+    expect(await visibleMath.evaluate(element => {
+      const parent = element.closest(".markdown-preview");
+      return parent ? getComputedStyle(element).color === getComputedStyle(parent).color : false;
+    })).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`math-${appearance}.png`) });
+    await page.reload();
+    await page.getByRole("button", { name: "Open note", exact: true }).click();
+    await expect(panel.getByLabel("Markdown text", { exact: true })).toHaveValue(source);
+    await panel.getByRole("tab", { name: "Preview", exact: true }).click();
+    await expect(panel.locator(".katex")).toHaveCount(2);
+    const download = page.waitForEvent("download");
+    await panel.getByRole("button", { name: "Download Markdown", exact: true }).click();
+    const filename = test.info().outputPath("formulas.md");
+    await (await download).saveAs(filename);
+    expect(await readFile(filename, "utf8")).toBe(source);
+  });
+}
+
+test("formula insertion wraps the selection; invalid and untrusted formulas do not break notes", async ({ canvasPage: page }) => {
+  await insert(page, "Markdown note");
+  await page.getByRole("button", { name: "Open note", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Node note", exact: true });
+  const editor = panel.getByLabel("Markdown text", { exact: true });
+  await editor.fill("a^2 + b^2 = c^2");
+  await editor.press("ControlOrMeta+A");
+  await panel.getByRole("button", { name: "Insert formula", exact: true }).click();
+  await expect(editor).toHaveValue("$$\na^2 + b^2 = c^2\n$$\n");
+  await expect(editor).toBeFocused();
+  await panel.getByRole("tab", { name: "Preview", exact: true }).click();
+  await expect(panel.locator(".katex-display")).toBeVisible();
+  await panel.getByRole("tab", { name: "Edit description", exact: true }).click();
+  await editor.fill("$\\frac{1}{$\n\n$\\href{javascript:alert(1)}{unsafe}$\n\nStill readable.");
+  await panel.getByRole("tab", { name: "Preview", exact: true }).click();
+  await expect(panel.locator(".katex-error")).toHaveCount(1);
+  await expect(panel.locator('a[href^="javascript:"]')).toHaveCount(0);
+  await expect(panel.getByText("Still readable.", { exact: true })).toBeVisible();
+  await panel.getByRole("tab", { name: "Edit description", exact: true }).click();
+  await editor.fill("$x^2$");
+  await panel.getByRole("tab", { name: "Preview", exact: true }).click();
+  await expect(panel.locator(".katex")).toHaveCount(1);
+  await expect(panel.locator(".katex-error")).toHaveCount(0);
+});

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown, { defaultUrlTransform } from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import type { CanvasNode } from "@talweg/core";
 import type { StorageAdapter } from "@talweg/storage";
-import { Download, FileUp, ImagePlus, X } from "lucide-react";
+import { Download, FileUp, ImagePlus, Sigma, X } from "lucide-react";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { AssetImage } from "./AssetImage.js";
 import { downloadText, exportNoteMarkdown } from "../utils/noteFiles.js";
@@ -94,6 +97,22 @@ export function NoteEditor({
     }
   };
 
+  const addFormula = () => {
+    const editor = textareaRef.current;
+    const start = editor?.selectionStart ?? markdown.length;
+    const end = editor?.selectionEnd ?? start;
+    const formula = markdown.slice(start, end) || "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}";
+    const prefix = start ? "\n\n" : "";
+    const suffix = end < markdown.length ? "\n\n" : "\n";
+    onChange(`${markdown.slice(0, start)}${prefix}$$\n${formula}\n$$${suffix}${markdown.slice(end)}`);
+    setTab("edit");
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      const position = start + prefix.length + 3;
+      textareaRef.current?.setSelectionRange(position, position + formula.length);
+    });
+  };
+
   return createPortal(
     <div
       className="note-backdrop"
@@ -146,6 +165,9 @@ export function NoteEditor({
             </button>
           </div>
           <div>
+            <button type="button" aria-label={t("note.addFormula")} title={t("note.addFormula")} onClick={addFormula}>
+              <Sigma size={16} />
+            </button>
             <button
               type="button"
               aria-label={t("note.addImage")}
@@ -215,6 +237,8 @@ export function NoteEditor({
           <div className="markdown-preview" role="tabpanel">
             <Markdown
               skipHtml
+              remarkPlugins={[remarkMath]}
+              rehypePlugins={[[rehypeKatex, { trust: false, maxSize: 20, maxExpand: 1000 }]]}
               urlTransform={(url) =>
                 url.startsWith("asset:") ||
                 /^data:image\/(png|jpeg|webp|gif);base64,/i.test(url)
@@ -249,7 +273,7 @@ export function NoteEditor({
           </div>
         )}
         <footer>
-          <span>{t("note.saved")}</span>
+          <span>{tab === "edit" ? t("note.mathHint") : t("note.saved")}</span>
           <span>
             {String(markdown.length)} {t("note.characters")}
           </span>

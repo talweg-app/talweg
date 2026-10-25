@@ -224,7 +224,9 @@
     "fileError": "Choose a Markdown file smaller than 10 MB.",
     "localImageOnly": "Add this image from your device to keep it in the document.",
     "add": "Add description",
-    "remove": "Remove description"
+    "remove": "Remove description",
+    "addFormula": "Insert formula",
+    "mathHint": "Math: $x^2$ inline, $$ on separate lines for a full equation."
   },
   "pages": {
     "add": "Add page",

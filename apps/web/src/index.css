@@ -1083,3 +1083,7 @@
 
 .workspace-board-delete:hover { color: #dc6868; background: rgb(220 104 104 / 10%); }
 .workspace-board-hide:disabled { opacity: 0.45; cursor: wait; }
+
+.markdown-preview .katex { font-size: 1.1em; }
+.markdown-preview .katex-display { overflow-x: auto; overflow-y: hidden; padding-block: 0.4em; }
+.markdown-preview .katex-error { white-space: pre-wrap; overflow-wrap: anywhere; }
