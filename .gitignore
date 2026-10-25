@@ -10,3 +10,6 @@ playwright-report/
 
 # local project library
 /projects/
+
+# agent context stays in .infoslop
+/.agents/
