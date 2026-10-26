@@ -977,40 +977,45 @@ export function useCanvas(
     }, TRANSACTION_ORIGINS.LOCAL_USER);
   }, []);
 
-  const deletePage = useCallback((pageId: PageId): void => {
-    const ydoc = ydocRef.current;
-    if (!ydoc) return;
-    const currentDoc = yDocToDocument(ydoc);
-    const existingPages = currentDoc.pages;
-    if (!existingPages || Object.keys(existingPages).length <= 1) return;
-    const remaining: Record<PageId, CanvasPage> = {};
-    for (const [id, page] of Object.entries(existingPages)) {
-      if (id !== pageId) {
-        remaining[id] = page;
-      }
-    }
-    const remainingList = Object.values(remaining).sort(
-      (a, b) => a.order - b.order,
-    );
-    const nextActiveId = remainingList[0]?.id ?? "page-1";
-
-    const metaMap = ydoc.getMap<unknown>(SCENE_META_KEY);
-    const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
-    ydoc.transact(() => {
-      for (const [nodeId, node] of Object.entries(currentDoc.nodes)) {
-        if (node.pageId === pageId) {
-          nodesMap.delete(nodeId);
+  const deletePage = useCallback(
+    (pageId: PageId): void => {
+      const ydoc = ydocRef.current;
+      if (!ydoc) return;
+      const currentDoc = yDocToDocument(ydoc);
+      const existingPages = currentDoc.pages;
+      if (!existingPages || Object.keys(existingPages).length <= 1) return;
+      const remaining: Record<PageId, CanvasPage> = {};
+      for (const [id, page] of Object.entries(existingPages)) {
+        if (id !== pageId) {
+          remaining[id] = page;
         }
       }
-      const sharedPages = metaMap.get("pages");
-      if (sharedPages instanceof Y.Map)
-        for (const id of sharedPages.keys())
-          if (!remaining[id]) sharedPages.delete(id);
-      metaMap.set("activePageId", nextActiveId);
-    }, TRANSACTION_ORIGINS.LOCAL_USER);
-    setActivePageId(nextActiveId);
-    setSelectedNodeIds(new Set());
-  }, []);
+      const remainingList = Object.values(remaining).sort(
+        (a, b) => a.order - b.order,
+      );
+      const nextActiveId = remaining[activePageId]
+        ? activePageId
+        : (remainingList[0]?.id ?? "page-1");
+
+      const metaMap = ydoc.getMap<unknown>(SCENE_META_KEY);
+      const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
+      ydoc.transact(() => {
+        for (const [nodeId, node] of Object.entries(currentDoc.nodes)) {
+          if (node.pageId === pageId) {
+            nodesMap.delete(nodeId);
+          }
+        }
+        const sharedPages = metaMap.get("pages");
+        if (sharedPages instanceof Y.Map)
+          for (const id of sharedPages.keys())
+            if (!remaining[id]) sharedPages.delete(id);
+        metaMap.set("activePageId", nextActiveId);
+      }, TRANSACTION_ORIGINS.LOCAL_USER);
+      setActivePageId(nextActiveId);
+      if (pageId === activePageId) setSelectedNodeIds(new Set());
+    },
+    [activePageId],
+  );
 
   const updateNode = useCallback((id: NodeId, updates: Partial<CanvasNode>) => {
     const ydoc = ydocRef.current;
@@ -1507,6 +1512,28 @@ export function useCanvas(
           ? e.code.slice(3).toLowerCase()
           : e.key.toLowerCase();
       const activeElement = document.activeElement;
+      const isControl =
+        activeElement instanceof HTMLElement &&
+        activeElement.closest(
+          'button, a[href], [role="button"], [role="tab"], [role="menuitem"]',
+        );
+      if (
+        isControl &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        [
+          " ",
+          "Enter",
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "Home",
+          "End",
+          "F2",
+        ].includes(e.key)
+      )
+        return;
       const isCanvasText =
         activeElement instanceof HTMLElement &&
         activeElement.isContentEditable &&

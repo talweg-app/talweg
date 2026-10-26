@@ -49,6 +49,7 @@ export interface DragState {
   readonly startWorld: Point2D;
   readonly lastScreen: Point2D;
   readonly currentWorld?: Point2D;
+  readonly initialSelection?: ReadonlySet<NodeId>;
   readonly initialNodePositions?: ReadonlyMap<NodeId, Point2D>;
   readonly connectSourceId?: NodeId;
   readonly connectSourceAnchor?: CompassAnchor;

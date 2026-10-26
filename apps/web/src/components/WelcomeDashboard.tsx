@@ -80,6 +80,7 @@ export function WelcomeDashboard({
   onImportSuccess,
 }: WelcomeDashboardProps) {
   const { t, language } = useTranslation();
+  const plurals = useMemo(() => new Intl.PluralRules(language), [language]);
   const relativeTime = useMemo(
     () => new Intl.RelativeTimeFormat(language, { numeric: "auto" }),
     [language],
@@ -524,7 +525,10 @@ export function WelcomeDashboard({
                         )}
                       </span>
                       <span className="workspace-board-count">
-                        {String(snapshot.nodeCount)} {t("dashboard.elements")}
+                        {String(snapshot.nodeCount)}{" "}
+                        {t(
+                          `dashboard.elements_${plurals.select(snapshot.nodeCount)}`,
+                        )}
                       </span>
                       <span className="workspace-board-time">
                         <Clock size={12} />

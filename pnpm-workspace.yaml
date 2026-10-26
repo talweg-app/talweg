@@ -11,3 +11,6 @@ minimumReleaseAgeExclude:
   - "@turbo/windows-64@2.11.10"
   - "@turbo/windows-arm64@2.11.10"
   - turbo@2.11.10
+
+overrides:
+  "katex@<0.18.2": "0.19.1"

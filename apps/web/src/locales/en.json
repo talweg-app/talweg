@@ -102,7 +102,10 @@
     "templates": "Starter Templates",
     "recentBoards": "Recent Boards",
     "noRecent": "No saved boards yet. Create one from a template or start blank.",
-    "elements": "elements",
+    "elements_one": "element",
+    "elements_few": "elements",
+    "elements_many": "elements",
+    "elements_other": "elements",
     "blankTitle": "Blank Canvas",
     "blankDesc": "Ideas, notes, and sketches. Arrange them your way.",
     "microTitle": "Microservices Architecture",
@@ -234,6 +237,9 @@
     "mathHint": "Math: $x^2$ inline, $$ on separate lines for a full equation."
   },
   "pages": {
+    "title": "Pages",
+    "name": "Page name",
+    "rename": "Rename page (F2)",
     "add": "Add page",
     "delete": "Delete page"
   },

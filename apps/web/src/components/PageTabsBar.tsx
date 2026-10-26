@@ -53,13 +53,20 @@ export function PageTabsBar({
     setEditingName(page.name);
   };
 
-  const handleCommitRename = (pageId: PageId) => {
+  const focusPage = (pageId: PageId) => {
+    requestAnimationFrame(() => {
+      document.getElementById(`canvas-page-tab-${pageId}`)?.focus();
+    });
+  };
+
+  const handleCommitRename = (pageId: PageId, restoreFocus = false) => {
     if (editingPageId === pageId) {
       const trimmed = editingName.trim();
       if (trimmed) {
         onRenamePage(pageId, trimmed);
       }
       setEditingPageId(null);
+      if (restoreFocus) focusPage(pageId);
     }
   };
 
@@ -78,7 +85,11 @@ export function PageTabsBar({
       }}
       className="canvas-pages-panel absolute bottom-4 left-4 z-30 flex items-center bg-[#131518] border border-white/[0.08] rounded shadow-md select-none"
     >
-      <div className="flex items-center max-w-[380px] overflow-x-auto no-scrollbar">
+      <div
+        role="tablist"
+        aria-label={t("pages.title")}
+        className="flex items-center max-w-[380px] overflow-x-auto no-scrollbar"
+      >
         {pages.map((page, index) => {
           const isActive = page.id === activePageId;
           const isEditing = editingPageId === page.id;
@@ -94,17 +105,12 @@ export function PageTabsBar({
                   : "text-neutral-500 hover:text-neutral-200 hover:bg-white/[0.03]"
               }`}
               data-active={isActive}
-              onClick={() => {
-                handleTabClick(page.id);
-              }}
-              onDoubleClick={() => {
-                handleStartRename(page);
-              }}
             >
               {isEditing ? (
                 <input
                   ref={inputRef}
                   type="text"
+                  aria-label={t("pages.name")}
                   value={editingName}
                   onChange={(e) => {
                     setEditingName(e.target.value);
@@ -114,9 +120,12 @@ export function PageTabsBar({
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      handleCommitRename(page.id);
+                      e.stopPropagation();
+                      handleCommitRename(page.id, true);
                     } else if (e.key === "Escape") {
+                      e.stopPropagation();
                       setEditingPageId(null);
+                      focusPage(page.id);
                     }
                   }}
                   className="bg-[#0b0c0e] text-neutral-100 px-1 py-0.5 rounded border border-white/[0.15] outline-none w-24 text-xs"
@@ -125,7 +134,50 @@ export function PageTabsBar({
                   }}
                 />
               ) : (
-                <span className="truncate max-w-[110px]">{page.name}</span>
+                <button
+                  id={`canvas-page-tab-${page.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  tabIndex={isActive ? 0 : -1}
+                  title={t("pages.rename")}
+                  className="h-full min-w-0 text-inherit cursor-pointer"
+                  onClick={() => {
+                    handleTabClick(page.id);
+                  }}
+                  onDoubleClick={() => {
+                    handleStartRename(page);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "F2") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleStartRename(page);
+                      return;
+                    }
+                    const nextIndex =
+                      event.key === "ArrowRight"
+                        ? (index + 1) % pages.length
+                        : event.key === "ArrowLeft"
+                          ? (index - 1 + pages.length) % pages.length
+                          : event.key === "Home"
+                            ? 0
+                            : event.key === "End"
+                              ? pages.length - 1
+                              : undefined;
+                    const next =
+                      nextIndex === undefined ? undefined : pages[nextIndex];
+                    if (!next) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleTabClick(next.id);
+                    focusPage(next.id);
+                  }}
+                >
+                  <span className="block truncate max-w-[110px]">
+                    {page.name}
+                  </span>
+                </button>
               )}
 
               {pages.length > 1 && !isEditing && (
@@ -133,10 +185,21 @@ export function PageTabsBar({
                   type="button"
                   title={t("pages.delete")}
                   aria-label={t("pages.delete")}
-                  className="opacity-0 group-hover:opacity-100 text-neutral-600 hover:text-rose-300 transition cursor-pointer"
+                  className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-neutral-600 hover:text-rose-300 transition cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeletePage(page.id);
+                    const next =
+                      page.id === activePageId
+                        ? pages.find((candidate) => candidate.id !== page.id)
+                        : pages.find(
+                            (candidate) => candidate.id === activePageId,
+                          );
+                    if (next) {
+                      if (page.id === activePageId)
+                        navigate(buildPagePath(boardId, next.id));
+                      focusPage(next.id);
+                    }
                   }}
                 >
                   <Trash2 className="w-3 h-3" />
@@ -155,6 +218,7 @@ export function PageTabsBar({
           const newId = onAddPage();
           if (newId) {
             navigate(buildPagePath(boardId, newId));
+            focusPage(newId);
           }
         }}
         className="flex items-center justify-center w-8 h-8 border-l border-white/[0.06] text-neutral-500 hover:text-neutral-100 hover:bg-white/[0.05] transition cursor-pointer"

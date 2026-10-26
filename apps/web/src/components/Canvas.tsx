@@ -293,12 +293,21 @@ export function Canvas({
   // Spacebar tracking for Pan mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat) {
+      if (
+        e.code === "Space" &&
+        !e.repeat &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
         const target = e.target as HTMLElement;
         if (
           target.tagName !== "INPUT" &&
           target.tagName !== "TEXTAREA" &&
-          !target.isContentEditable
+          !target.isContentEditable &&
+          !target.closest(
+            'button, select, a[href], [role="button"], [role="tab"], [role="menuitem"]',
+          )
         ) {
           e.preventDefault();
           setIsSpacePressed(true);
@@ -496,6 +505,7 @@ export function Canvas({
     if (activeTool === "select") {
       setDragState({
         mode: "marquee",
+        initialSelection: new Set(selectedNodeIds),
         startScreen: screenPoint,
         startWorld: worldPoint,
         lastScreen: screenPoint,
@@ -648,10 +658,17 @@ export function Canvas({
       };
 
       if (marqueeBounds.width > 3 || marqueeBounds.height > 3) {
-        const nextSelected = new Set<NodeId>(e.shiftKey ? selectedNodeIds : []);
+        const nextSelected = new Set<NodeId>(
+          e.shiftKey ? dragState.initialSelection : [],
+        );
         if (document) {
           for (const node of Object.values(pageNodes(document, activePageId))) {
-            if (node.type === "arrow" || node.type === "group") continue;
+            if (
+              node.type === "arrow" ||
+              node.type === "group" ||
+              !node.isVisible
+            )
+              continue;
             const nodeBounds = computeGroupBounds([node]);
             if (aabbIntersects(marqueeBounds, nodeBounds)) {
               nextSelected.add(node.id);
