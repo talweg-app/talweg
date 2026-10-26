@@ -1,3 +1,4 @@
+import { stabilizeConnections } from "../utils/connectorGeometry.js";
 import { copyBoard } from "../utils/copyBoard.js";
 import {
   upgradeSharedScene,
@@ -69,7 +70,6 @@ import {
   type NativeFileSystemFileHandle,
   saveDocumentToFileSystem,
 } from "../utils/fileSystem.js";
-import { layoutMindmapTree } from "../utils/mindmap.js";
 import { createId } from "../utils/template.js";
 
 import { firstPageId, pageNodes } from "../utils/pageNodes.js";
@@ -79,6 +79,22 @@ import {
 } from "../utils/boardLibrary.js";
 
 const DEFAULT_DOC_ID = "default-doc" as DocumentId;
+
+function pinConnectionSides(scene: Y.Doc, document: CanvasDocument): void {
+  const fixed = stabilizeConnections(document);
+  if (fixed === document) return;
+  const nodes = scene.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
+  for (const node of Object.values(fixed.nodes)) {
+    if (node.type !== "arrow" || node.data === document.nodes[node.id]?.data)
+      continue;
+    const data = nodes.get(node.id)?.get("data");
+    if (data instanceof Y.Map)
+      patchSharedMap(data, {
+        sourceAnchor: node.data.sourceAnchor,
+        targetAnchor: node.data.targetAnchor,
+      });
+  }
+}
 
 export interface UseCanvasReturn {
   collaboration: PeerState;
@@ -699,6 +715,16 @@ export function useCanvas(
     }
   }, [guestRoom]);
 
+  useEffect(() => {
+    const boundary = () => {
+      undoManagerRef.current?.stopCapturing();
+    };
+    window.addEventListener("talweg:text-edit-boundary", boundary);
+    return () => {
+      window.removeEventListener("talweg:text-edit-boundary", boundary);
+    };
+  }, []);
+
   const undo = useCallback(() => {
     undoManagerRef.current?.undo();
   }, []);
@@ -997,7 +1023,14 @@ export function useCanvas(
 
       const stored = yDocToDocument(ydoc);
       const node = stored.nodes[id];
-      const world = worldDocument(stored).nodes[id];
+      const worldDocumentBefore = worldDocument(stored);
+      if (
+        [updates.x, updates.y, updates.width, updates.height].some(
+          (value) => value !== undefined,
+        )
+      )
+        pinConnectionSides(ydoc, worldDocumentBefore);
+      const world = worldDocumentBefore.nodes[id];
       const local = { ...updates };
       if (node && world) {
         if (updates.x !== undefined) local.x = node.x + updates.x - world.x;
@@ -1083,6 +1116,7 @@ export function useCanvas(
         const nodesMap = ydoc.getMap<Y.Map<unknown>>(SCENE_NODES_KEY);
         const stored = yDocToDocument(ydoc);
         const world = worldDocument(stored);
+        pinConnectionSides(ydoc, world);
         for (const node of selectionRoots(stored, new Set(positions.keys()))) {
           const id = node.id;
           const point = positions.get(id);
@@ -1162,7 +1196,15 @@ export function useCanvas(
         updatedAt: timestamp,
       };
 
-      addNode(arrowNode);
+      const scene = ydocRef.current;
+      if (scene) {
+        const current = worldDocument(yDocToDocument(scene));
+        const fixed = stabilizeConnections({
+          ...current,
+          nodes: { ...current.nodes, [arrowId]: arrowNode },
+        });
+        addNode(fixed.nodes[arrowId] ?? arrowNode);
+      }
     },
     [addNode, mode],
   );
@@ -1196,6 +1238,7 @@ export function useCanvas(
       if (typeof oppositeId === "string" && oppositeId === nodeId) return;
 
       ydoc.transact(() => {
+        pinConnectionSides(ydoc, worldDocument(yDocToDocument(ydoc)));
         dataMap.set(endpointKey, nodeId);
         dataMap.set(anchorKey, anchor);
         arrowMap.set("updatedAt", Date.now());
@@ -1280,7 +1323,7 @@ export function useCanvas(
       if (!docState || !ydoc) return;
       const displayed = worldDocument(docState);
       const parent = displayed.nodes[parentId];
-      if (!parent) return;
+      if (!parent || parent.type === "arrow") return;
       const parentPage = parent.pageId ?? firstPageId(docState);
 
       const childId = createId("node");
@@ -1341,25 +1384,28 @@ export function useCanvas(
           startArrow: "none",
           endArrow: "none",
           curveStyle: "bezier",
+          sourceAnchor: "e",
+          targetAnchor: "w",
         },
         createdAt: timestamp,
         updatedAt: timestamp,
       };
 
-      const simulatedDoc: CanvasDocument = {
-        ...docState,
-        nodes: {
-          ...pageNodes(displayed, parentPage),
-          [childId]: childNode,
-          [arrowId]: arrowNode,
-        },
-      };
-
-      const newPositions = layoutMindmapTree(simulatedDoc, parentId);
-      const placed = newPositions.get(childId);
-      if (placed) {
-        childNode.x = placed.x;
-        childNode.y = placed.y;
+      childNode.y = parent.y + (parent.height - childNode.height) / 2;
+      const neighbors = Object.values(pageNodes(displayed, parentPage)).filter(
+        (node) =>
+          node.type !== "arrow" && node.type !== "group" && node.isVisible,
+      );
+      for (let attempt = 0; attempt <= neighbors.length; attempt++) {
+        const blocking = neighbors.find(
+          (node) =>
+            childNode.x < node.x + node.width + 24 &&
+            childNode.x + childNode.width + 24 > node.x &&
+            childNode.y < node.y + node.height + 24 &&
+            childNode.y + childNode.height + 24 > node.y,
+        );
+        if (!blocking) break;
+        childNode.y = blocking.y + blocking.height + 28;
       }
 
       ydoc.transact(() => {
@@ -1379,24 +1425,6 @@ export function useCanvas(
         }
         nodesMap.set(arrowId, arrowMap);
         rootOrder.push([arrowId]);
-
-        for (const [id, pos] of newPositions.entries()) {
-          if (id === childId) continue;
-          const existingMap = nodesMap.get(id);
-          if (existingMap instanceof Y.Map) {
-            const original = docState.nodes[id];
-            const world = displayed.nodes[id];
-            existingMap.set(
-              "x",
-              original && world ? original.x + pos.x - world.x : pos.x,
-            );
-            existingMap.set(
-              "y",
-              original && world ? original.y + pos.y - world.y : pos.y,
-            );
-            existingMap.set("updatedAt", timestamp);
-          }
-        }
       }, TRANSACTION_ORIGINS.LOCAL_USER);
 
       setSelectedNodeIds(new Set([childId]));
@@ -1474,7 +1502,15 @@ export function useCanvas(
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const shortcutKey =
+        (e.ctrlKey || e.metaKey) && /^Key[A-Z]$/.test(e.code)
+          ? e.code.slice(3).toLowerCase()
+          : e.key.toLowerCase();
       const activeElement = document.activeElement;
+      const isCanvasText =
+        activeElement instanceof HTMLElement &&
+        activeElement.isContentEditable &&
+        activeElement.hasAttribute("data-rich-text");
       const isInput =
         activeElement instanceof HTMLInputElement ||
         activeElement instanceof HTMLTextAreaElement ||
@@ -1482,10 +1518,19 @@ export function useCanvas(
         (activeElement instanceof HTMLElement &&
           activeElement.isContentEditable);
 
-      if (isInput && e.key.toLowerCase() !== "s") return;
+      if (
+        isInput &&
+        shortcutKey !== "s" &&
+        !(
+          isCanvasText &&
+          (e.ctrlKey || e.metaKey) &&
+          ["z", "y"].includes(shortcutKey)
+        )
+      )
+        return;
       if (
         (e.ctrlKey || e.metaKey) &&
-        e.key.toLowerCase() === "a" &&
+        shortcutKey === "a" &&
         !isInput &&
         docState
       ) {
@@ -1521,18 +1566,18 @@ export function useCanvas(
         );
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g" && !isInput) {
+      if ((e.ctrlKey || e.metaKey) && shortcutKey === "g" && !isInput) {
         e.preventDefault();
         if (e.shiftKey) ungroupSelected();
         else groupSelected();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && !isInput) {
+      if ((e.ctrlKey || e.metaKey) && shortcutKey === "d" && !isInput) {
         e.preventDefault();
         duplicateSelected();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      if ((e.ctrlKey || e.metaKey) && shortcutKey === "z") {
         e.preventDefault();
         if (e.shiftKey) {
           redo();
@@ -1542,13 +1587,13 @@ export function useCanvas(
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      if ((e.ctrlKey || e.metaKey) && shortcutKey === "y") {
         e.preventDefault();
         redo();
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      if ((e.ctrlKey || e.metaKey) && shortcutKey === "s") {
         e.preventDefault();
         void saveToFile();
         return;
@@ -1562,7 +1607,13 @@ export function useCanvas(
         return;
       }
 
-      if (mode === "mindmap" && selectedNodeIds.size === 1) {
+      if (
+        mode === "mindmap" &&
+        selectedNodeIds.size === 1 &&
+        [...selectedNodeIds].every(
+          (id) => docState?.nodes[id]?.type !== "arrow",
+        )
+      ) {
         const [selectedId] = [...selectedNodeIds];
         if (selectedId && e.key === "Tab") {
           e.preventDefault();
@@ -1577,7 +1628,7 @@ export function useCanvas(
       }
 
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      switch (e.key.toLowerCase()) {
+      switch (shortcutKey) {
         case "escape":
           setActiveTool("select");
           setSelectedNodeIds(new Set());

@@ -5,13 +5,11 @@ import { createId } from "./template.js";
 export function createCanvasNode(
   tool: ToolType,
   point: Point2D,
-  mode: CanvasMode,
+  _mode: CanvasMode,
   theme: "light" | "dark" = "dark",
 ): CanvasNode | null {
-  const x =
-    mode === "diagrams" ? Math.round(point.x / 16) * 16 : Math.round(point.x);
-  const y =
-    mode === "diagrams" ? Math.round(point.y / 16) * 16 : Math.round(point.y);
+  const x = Math.round(point.x);
+  const y = Math.round(point.y);
   const timestamp = Date.now();
   const base = {
     id: createId(tool),
@@ -37,7 +35,17 @@ export function createCanvasNode(
     },
   };
   switch (tool) {
-    case "markdown": return { ...base, type: tool, width: 240, height: 120, x: x - 120, y: y - 60, data: { title: "" }, note: "" };
+    case "markdown":
+      return {
+        ...base,
+        type: tool,
+        width: 240,
+        height: 120,
+        x: x - 120,
+        y: y - 60,
+        data: { title: "" },
+        note: "",
+      };
     case "rectangle":
       return { ...base, type: tool, data: { label: "" } };
     case "ellipse":

@@ -16,7 +16,8 @@ interface ConnectorRendererProps {
   isSelected: boolean;
   onSelect: (id: NodeId, e: React.PointerEvent) => void;
   onEditLabel: (id: NodeId, point: { x: number; y: number }) => void;
-  onHoverArrow?: (id: NodeId | null) => void;
+  zoom: number;
+  isPanActive: boolean;
 }
 
 export function ConnectorRenderer({
@@ -26,7 +27,8 @@ export function ConnectorRenderer({
   portSlots,
   isSelected,
   onSelect,
-  onHoverArrow,
+  zoom,
+  isPanActive,
   onEditLabel,
 }: ConnectorRendererProps) {
   const { theme } = useTheme();
@@ -40,7 +42,10 @@ export function ConnectorRenderer({
 
   if (!renderedData) return null;
 
-  const strokeColor = connectorAppearance(arrow.style.strokeColor ?? "#64748b", theme);
+  const strokeColor = connectorAppearance(
+    arrow.style.strokeColor ?? "#64748b",
+    theme,
+  );
   const strokeWidth =
     arrow.style.strokeDash === "none" ? 0 : (arrow.style.strokeWidth ?? 1.5);
 
@@ -48,13 +53,14 @@ export function ConnectorRenderer({
     <g
       data-node-id={arrow.id}
       onDoubleClick={(event) => {
+        if (isPanActive) return;
         event.stopPropagation();
         onEditLabel(arrow.id, { x: event.clientX, y: event.clientY });
       }}
       className="cursor-pointer group"
       onPointerDown={(e) => {
+        if (e.button !== 0 || isPanActive) return;
         e.stopPropagation();
-        if (e.button !== 0) return;
         onSelect(arrow.id, e);
       }}
     >
@@ -63,14 +69,9 @@ export function ConnectorRenderer({
         d={renderedData.lineSvgPath}
         fill="none"
         stroke="transparent"
-        strokeWidth={16}
+        strokeWidth={Math.max(10 / zoom, strokeWidth + 4 / zoom)}
+        data-testid="connector-hit"
         className="pointer-events-auto"
-        onPointerEnter={() => {
-          onHoverArrow?.(arrow.id);
-        }}
-        onPointerLeave={() => {
-          onHoverArrow?.(null);
-        }}
       />
 
       {isSelected && (
@@ -79,7 +80,7 @@ export function ConnectorRenderer({
           fill="none"
           stroke="#e9dda7"
           strokeOpacity={0.25}
-          strokeWidth={strokeWidth + 6}
+          strokeWidth={strokeWidth + 4 / zoom}
           className="pointer-events-none"
         />
       )}

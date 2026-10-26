@@ -66,9 +66,9 @@
     "share": "Copy room link to clipboard",
     "export": "Download PNG",
     "mindmapTip": "Tab: child node, Enter: sibling node",
-    "modeWhiteboard": "Whiteboard: Freeform sticky notes & cards",
-    "modeDiagrams": "Diagrams: 16px grid snap, flowchart primitives & ports",
-    "modeMindmap": "Mindmap: Tree layout calculation & Bezier curves",
+    "modeWhiteboard": "Free placement and straight connections",
+    "modeDiagrams": "Flowcharts with right-angle connections",
+    "modeMindmap": "Connected ideas; Tab adds a branch",
     "pen": "Pen (P)",
     "text": "Text (T)"
   },
@@ -353,5 +353,11 @@
     "paste": "Paste",
     "export": "Export selection",
     "rangeTooLarge": "The pasted range is too large (10,000 cells maximum)."
+  },
+  "canvasMenu": {
+    "title": "Canvas settings",
+    "label": "Canvas",
+    "snap": "Snap to grid",
+    "drawing": "Drawing mode"
   }
 }

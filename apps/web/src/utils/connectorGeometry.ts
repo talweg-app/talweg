@@ -95,12 +95,38 @@ function resolveArrow(
   const targetAnchor = arrow.data.targetAnchor
     ? anchorForFace(arrow.data.targetAnchor)
     : undefined;
-  const anchors =
-    sourceAnchor !== undefined && targetAnchor !== undefined
-      ? { sourceAnchor, targetAnchor }
-      : resolveAutoAnchors(sourceBox, targetBox);
+  const automatic = resolveAutoAnchors(sourceBox, targetBox);
+  return {
+    sourceNode,
+    targetNode,
+    sourceBox,
+    targetBox,
+    sourceAnchor: sourceAnchor ?? automatic.sourceAnchor,
+    targetAnchor: targetAnchor ?? automatic.targetAnchor,
+  };
+}
 
-  return { sourceNode, targetNode, sourceBox, targetBox, ...anchors };
+export function stabilizeConnections(document: CanvasDocument): CanvasDocument {
+  let nodes = document.nodes;
+  for (const node of Object.values(document.nodes)) {
+    if (
+      node.type !== "arrow" ||
+      (node.data.sourceAnchor && node.data.targetAnchor)
+    )
+      continue;
+    const resolved = resolveArrow(node, document);
+    if (!resolved) continue;
+    if (nodes === document.nodes) nodes = { ...nodes };
+    nodes[node.id] = {
+      ...node,
+      data: {
+        ...node.data,
+        sourceAnchor: FACE_BY_DIRECTION[resolved.sourceAnchor.direction],
+        targetAnchor: FACE_BY_DIRECTION[resolved.targetAnchor.direction],
+      },
+    };
+  }
+  return nodes === document.nodes ? document : { ...document, nodes };
 }
 
 export function buildPortSlotMap(document: CanvasDocument): PortSlotMap {

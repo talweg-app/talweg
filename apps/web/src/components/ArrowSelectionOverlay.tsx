@@ -20,7 +20,7 @@ import { useTranslation } from "../hooks/useTranslation.js";
 
 import { shapeAnchor } from "../utils/shapeAnchors.js";
 
-const PORT_HIT_RADIUS = 30;
+const PORT_HIT_RADIUS = 12;
 const COMPASS_FACES: readonly CompassAnchor[] = ["n", "s", "e", "w"];
 
 interface PortHit {
@@ -39,6 +39,7 @@ interface DragState {
 
 interface ArrowSelectionOverlayProps {
   arrows: readonly ArrowNode[];
+  isPanActive: boolean;
   document: CanvasDocument;
   portSlots: PortSlotMap;
   zoom: number;
@@ -55,17 +56,28 @@ function findNearestPort(
   document: CanvasDocument,
   point: Point2D,
   excludedNodeId: NodeId,
+  zoom: number,
 ): PortHit | null {
   let nearest: PortHit | null = null;
-  let nearestDistance = PORT_HIT_RADIUS;
+  let nearestDistance = PORT_HIT_RADIUS / zoom;
 
   for (const node of Object.values(document.nodes)) {
-    if (node.type === "arrow" || !node.isVisible || node.id === excludedNodeId) continue;
+    if (
+      node.type === "arrow" ||
+      node.type === "group" ||
+      node.isLocked ||
+      !node.isVisible ||
+      node.id === excludedNodeId
+    )
+      continue;
 
     const box = nodeToBoundingBox(node);
 
     for (const face of COMPASS_FACES) {
-      const portPoint = getAnchorPoint(box, shapeAnchor(node, anchorForFace(face)));
+      const portPoint = getAnchorPoint(
+        box,
+        shapeAnchor(node, anchorForFace(face)),
+      );
       const distance = Math.hypot(portPoint.x - point.x, portPoint.y - point.y);
 
       if (distance <= nearestDistance) {
@@ -97,7 +109,9 @@ function EndpointHandle({
   return (
     <button
       type="button"
-      aria-label={t(isSource ? "canvas.reconnectSource" : "canvas.reconnectTarget")}
+      aria-label={t(
+        isSource ? "canvas.reconnectSource" : "canvas.reconnectTarget",
+      )}
       data-arrow-endpoint={endpoint}
       className={`absolute rounded-full border-2 shadow-lg pointer-events-auto cursor-crosshair transition-colors ${
         isSource
@@ -118,6 +132,7 @@ function EndpointHandle({
 
 export function ArrowSelectionOverlay({
   arrows,
+  isPanActive,
   document,
   portSlots,
   zoom,
@@ -157,7 +172,7 @@ export function ArrowSelectionOverlay({
 
       const pointer = toWorld(event.clientX, event.clientY);
       const next: DragState = { ...current, pointer };
-      const hit = findNearestPort(document, pointer, current.otherNodeId);
+      const hit = findNearestPort(document, pointer, current.otherNodeId, zoom);
 
       dragRef.current = next;
       hoveredRef.current = hit;
@@ -192,7 +207,7 @@ export function ArrowSelectionOverlay({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
     };
-  }, [isDragging, document, toWorld, onReconnect]);
+  }, [isDragging, document, toWorld, onReconnect, zoom]);
 
   const beginDrag = (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -200,6 +215,7 @@ export function ArrowSelectionOverlay({
     endpoint: ArrowEndpoint,
     anchorPoint: Point2D,
   ) => {
+    if (event.button !== 0 || isPanActive) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -209,7 +225,8 @@ export function ArrowSelectionOverlay({
       endpoint,
       anchorPoint,
       pointer: toWorld(event.clientX, event.clientY),
-      otherNodeId: endpoint === "source" ? arrow.data.targetId : arrow.data.sourceId,
+      otherNodeId:
+        endpoint === "source" ? arrow.data.targetId : arrow.data.sourceId,
     };
 
     dragRef.current = next;
@@ -243,7 +260,6 @@ export function ArrowSelectionOverlay({
             width: 20,
             height: 20,
             transform: `translate(-50%, -50%) scale(${String(1 / zoom)})`,
-            boxShadow: "0 0 16px 4px rgba(16, 185, 129, 0.75)",
           }}
         />
       )}

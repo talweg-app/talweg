@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   computeGroupBounds,
   zoomToBounds,
@@ -29,6 +30,21 @@ export default function CanvasView({
   onOpenDashboard,
 }: CanvasViewProps) {
   const { t } = useTranslation();
+  const [snapToGrid, setSnapToGrid] = useState(() => {
+    try {
+      return localStorage.getItem("talweg_snap_to_grid") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const changeSnapping = (value: boolean) => {
+    setSnapToGrid(value);
+    try {
+      localStorage.setItem("talweg_snap_to_grid", String(value));
+    } catch {
+      /* keep the current preference for this session */
+    }
+  };
   const {
     collaboration,
     clipboardError,
@@ -149,6 +165,9 @@ export default function CanvasView({
   const selectedFirstId =
     selectedNodeIds.size > 0 ? [...selectedNodeIds][0] : undefined;
 
+  const selectedNode = selectedFirstId
+    ? document?.nodes[selectedFirstId]
+    : undefined;
   return (
     <div className="flex flex-col w-screen h-screen overflow-clip bg-[var(--canvas-bg)] text-[var(--ink)] font-sans antialiased">
       <Header
@@ -179,6 +198,9 @@ export default function CanvasView({
         mode={mode}
         camera={camera}
         onModeChange={setMode}
+        snapToGrid={snapToGrid}
+        onSnapToGrid={changeSnapping}
+        onZoomToFit={zoomToFit}
         onUpdateTitle={updateDocumentName}
         onOpenDashboard={onOpenDashboard}
         onResetZoom={resetZoom}
@@ -265,6 +287,7 @@ export default function CanvasView({
             activeTool={activeTool}
             onSelectTool={setActiveTool}
             mode={mode}
+            snapToGrid={snapToGrid}
             selectedNodeIds={selectedNodeIds}
             onSelectNodeIds={setSelectedNodeIds}
             onAddNode={addNode}
@@ -382,6 +405,11 @@ export default function CanvasView({
             onUndo={undo}
             onRedo={redo}
             hasSelection={selectedNodeIds.size > 0}
+            canBranch={
+              selectedNodeIds.size === 1 &&
+              !!selectedNode &&
+              selectedNode.type !== "arrow"
+            }
             onDeleteSelected={deleteSelectedNodes}
             onAddMindmapChild={() => {
               if (selectedFirstId) createMindmapChild(selectedFirstId);

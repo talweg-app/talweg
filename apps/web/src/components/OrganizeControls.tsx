@@ -20,7 +20,8 @@ export function OrganizeControls({
   const nodes = selectionRoots(document, selectedIds).filter(
     (node) => node.type !== "arrow",
   );
-  if (!nodes.length) return null;
+  if (!nodes.length || (nodes.length === 1 && nodes[0]?.type !== "group"))
+    return null;
   const canGroup = nodes.length >= 2 && nodes.every((node) => !node.parentId);
   return (
     <div className="organize-controls" data-testid="organize-controls">

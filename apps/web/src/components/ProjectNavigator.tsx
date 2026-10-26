@@ -42,152 +42,144 @@ export function ProjectNavigator({
         input.current?.select();
       }
     };
+    const show = () => {
+      setOpen(true);
+      input.current?.focus();
+    };
+    window.addEventListener("talweg:open-search", show);
     window.addEventListener("keydown", handleKey);
     return () => {
+      window.removeEventListener("talweg:open-search", show);
       window.removeEventListener("keydown", handleKey);
     };
   }, []);
   const groups = Object.values(document.nodes).filter(
     (node) => node.type === "group",
   );
+  if (!open) return null;
   return (
     <aside
-      className={`project-navigator ${open ? "is-open" : ""}`}
+      className="project-navigator is-open"
       aria-label={t("navigation.title")}
       onPointerDown={(event) => {
         event.stopPropagation();
       }}
     >
-      {!open ? (
-        <button
-          className="project-navigator-toggle"
-          type="button"
-          onClick={() => {
-            setOpen(true);
-          }}
-          title={t("navigation.hint")}
-        >
-          <Search size={15} />
-          {t("navigation.open")}
-        </button>
-      ) : (
-        <>
-          <header>
-            <strong>{t("navigation.title")}</strong>
-            <button
-              type="button"
-              aria-label={t("navigation.close")}
-              onClick={() => {
+      <>
+        <header>
+          <strong>{t("navigation.title")}</strong>
+          <button
+            type="button"
+            aria-label={t("navigation.close")}
+            onClick={() => {
+              setOpen(false);
+            }}
+          >
+            <X size={16} />
+          </button>
+        </header>
+        <div className="project-search">
+          <Search size={14} />
+          <input
+            ref={input}
+            type="search"
+            aria-label={t("navigation.search")}
+            placeholder={t("navigation.search")}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.stopPropagation();
                 setOpen(false);
-              }}
-            >
-              <X size={16} />
-            </button>
-          </header>
-          <div className="project-search">
-            <Search size={14} />
-            <input
-              ref={input}
-              type="search"
-              aria-label={t("navigation.search")}
-              placeholder={t("navigation.search")}
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  setOpen(false);
-                }
-                if (event.key === "Enter" && results[0]) {
-                  event.preventDefault();
-                  onFocusNode(results[0].node.id);
-                }
-              }}
-            />
-          </div>
-          <div className="project-navigator-body">
-            {query.trim() ? (
-              <>
-                <p className="project-navigator-caption" role="status">
-                  {results.length} {t("navigation.results")}
-                </p>
-                {results.length ? (
-                  results.slice(0, 100).map((result) => (
-                    <button
-                      type="button"
-                      key={result.node.id}
-                      className="project-search-result"
-                      onClick={() => {
-                        onFocusNode(result.node.id);
-                      }}
-                    >
-                      <span>
-                        {pages.find((page) => page.id === result.pageId)
-                          ?.name ?? result.pageId}{" "}
-                        · {t(`tools.${result.node.type}`)}
-                      </span>
-                      <strong>{result.excerpt}</strong>
-                    </button>
-                  ))
-                ) : (
-                  <p className="project-navigator-empty">
-                    {t("navigation.noResults")}
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="project-navigator-caption">
-                  {t("navigation.pages")}
-                </p>
-                {pages.map((page) => (
+              }
+              if (event.key === "Enter" && results[0]) {
+                event.preventDefault();
+                onFocusNode(results[0].node.id);
+              }
+            }}
+          />
+        </div>
+        <div className="project-navigator-body">
+          {query.trim() ? (
+            <>
+              <p className="project-navigator-caption" role="status">
+                {results.length} {t("navigation.results")}
+              </p>
+              {results.length ? (
+                results.slice(0, 100).map((result) => (
                   <button
                     type="button"
-                    key={page.id}
-                    className="project-page-link"
-                    aria-current={page.id === activePageId ? "page" : undefined}
+                    key={result.node.id}
+                    className="project-search-result"
                     onClick={() => {
-                      onPage(page.id);
+                      onFocusNode(result.node.id);
                     }}
                   >
-                    <File size={14} />
-                    <span>{page.name}</span>
+                    <span>
+                      {pages.find((page) => page.id === result.pageId)?.name ??
+                        result.pageId}{" "}
+                      · {t(`tools.${result.node.type}`)}
+                    </span>
+                    <strong>{result.excerpt}</strong>
                   </button>
-                ))}
-                <p className="project-navigator-caption">
-                  {t("navigation.groups")}
+                ))
+              ) : (
+                <p className="project-navigator-empty">
+                  {t("navigation.noResults")}
                 </p>
-                {groups.length ? (
-                  groups.map((group) => (
-                    <button
-                      type="button"
-                      key={group.id}
-                      className="project-page-link"
-                      onClick={() => {
-                        onFocusNode(group.id);
-                      }}
-                    >
-                      <Group size={14} />
-                      <span>
-                        {typeof group.meta?.title === "string" &&
-                        group.meta.title
-                          ? group.meta.title
-                          : t("organize.group")}
-                      </span>
-                    </button>
-                  ))
-                ) : (
-                  <p className="project-navigator-empty">
-                    {t("navigation.noGroups")}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        </>
-      )}
+              )}
+            </>
+          ) : (
+            <>
+              <p className="project-navigator-caption">
+                {t("navigation.pages")}
+              </p>
+              {pages.map((page) => (
+                <button
+                  type="button"
+                  key={page.id}
+                  className="project-page-link"
+                  aria-current={page.id === activePageId ? "page" : undefined}
+                  onClick={() => {
+                    onPage(page.id);
+                  }}
+                >
+                  <File size={14} />
+                  <span>{page.name}</span>
+                </button>
+              ))}
+              <p className="project-navigator-caption">
+                {t("navigation.groups")}
+              </p>
+              {groups.length ? (
+                groups.map((group) => (
+                  <button
+                    type="button"
+                    key={group.id}
+                    className="project-page-link"
+                    onClick={() => {
+                      onFocusNode(group.id);
+                    }}
+                  >
+                    <Group size={14} />
+                    <span>
+                      {typeof group.meta?.title === "string" && group.meta.title
+                        ? group.meta.title
+                        : t("organize.group")}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="project-navigator-empty">
+                  {t("navigation.noGroups")}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </>
     </aside>
   );
 }

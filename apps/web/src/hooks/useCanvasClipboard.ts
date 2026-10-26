@@ -34,6 +34,16 @@ export function useCanvasClipboard(canvas: ClipboardCanvas): void {
   current.current = canvas;
   const pasteCount = useRef(0);
   useEffect(() => {
+    let middleGesture = false;
+    const pointerIntent = (event: MouseEvent) => {
+      middleGesture =
+        event.button === 1 &&
+        event.target instanceof Element &&
+        !!event.target.closest('[data-testid="canvas"]');
+    };
+    const keyboardIntent = () => {
+      middleGesture = false;
+    };
     const transfer = (event: Event, cut: boolean) => {
       const source = current.current;
       if (
@@ -121,6 +131,12 @@ export function useCanvasClipboard(canvas: ClipboardCanvas): void {
       });
     };
     const paste = (event: ClipboardEvent) => {
+      // primary-selection paste may arrive after pointerup, so clear this only on a new user action
+      if (middleGesture) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       if (textInput()) return;
       const text = event.clipboardData?.getData("text/plain") ?? "";
       if (!text || event.clipboardData?.files.length) return;
@@ -177,6 +193,10 @@ export function useCanvasClipboard(canvas: ClipboardCanvas): void {
           source.error("copyFailed");
         });
     };
+    window.addEventListener("pointerdown", pointerIntent, true);
+    window.addEventListener("mousedown", pointerIntent, true);
+    window.addEventListener("keydown", keyboardIntent, true);
+    window.addEventListener("blur", keyboardIntent);
     window.addEventListener("talweg:copy", menuCopy);
     window.addEventListener("talweg:cut", menuCut);
     window.addEventListener("talweg:paste", menuPaste);
@@ -186,6 +206,10 @@ export function useCanvasClipboard(canvas: ClipboardCanvas): void {
     window.addEventListener("cut", cut);
     window.addEventListener("paste", paste, true);
     return () => {
+      window.removeEventListener("pointerdown", pointerIntent, true);
+      window.removeEventListener("mousedown", pointerIntent, true);
+      window.removeEventListener("keydown", keyboardIntent, true);
+      window.removeEventListener("blur", keyboardIntent);
       window.removeEventListener("talweg:copy", menuCopy);
       window.removeEventListener("talweg:cut", menuCut);
       window.removeEventListener("talweg:paste", menuPaste);

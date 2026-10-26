@@ -9,6 +9,10 @@ import {
   Save,
   Share2,
   StickyNote,
+  SlidersHorizontal,
+  Search,
+  Scan,
+  Grid2X2,
 } from "lucide-react";
 import type { StorageAdapter } from "@talweg/storage";
 import type { CameraViewport, CanvasDocument } from "@talweg/core";
@@ -32,6 +36,9 @@ interface HeaderProps {
   mode: CanvasMode;
   camera?: CameraViewport;
   onModeChange: (mode: CanvasMode) => void;
+  snapToGrid: boolean;
+  onSnapToGrid: (enabled: boolean) => void;
+  onZoomToFit: () => void;
   onUpdateTitle?: (title: string) => void;
   onOpenDashboard?: () => void;
   onResetZoom?: () => void;
@@ -60,6 +67,9 @@ export function Header({
   mode,
   camera,
   onModeChange,
+  snapToGrid,
+  onSnapToGrid,
+  onZoomToFit,
   onUpdateTitle,
   onOpenDashboard,
   onResetZoom,
@@ -137,7 +147,6 @@ export function Header({
 
   const { theme } = useTheme();
   const zoomPercent = Math.round((camera?.zoom ?? 1.0) * 100);
-  const ActiveModeIcon = MODES.find((m) => m.id === mode)?.icon ?? StickyNote;
 
   return (
     <header className="canvas-header h-12 shrink-0 border-b border-white/[0.08] bg-[#191b1c] px-3 flex items-center justify-between z-30 select-none">
@@ -191,12 +200,12 @@ export function Header({
               ? "bg-white/[0.07] text-neutral-100"
               : "text-neutral-300 hover:bg-white/[0.05] hover:text-neutral-100"
           }`}
-          aria-label={t(`modes.${mode}`)}
+          aria-label={t("canvasMenu.title")}
           aria-haspopup="menu"
           aria-expanded={modeMenuOpen}
         >
-          <ActiveModeIcon className="w-3.5 h-3.5 text-[var(--accent)]" />
-          <span>{t(`modes.${mode}`)}</span>
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span>{t("canvasMenu.label")}</span>
           <ChevronDown
             className={`w-3 h-3 text-neutral-500 transition ${modeMenuOpen ? "rotate-180" : ""}`}
           />
@@ -208,6 +217,50 @@ export function Header({
             data-testid="mode-picker-menu"
             className="canvas-mode-menu absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[var(--panel)] border border-[var(--panel-border)] rounded shadow-md select-none z-50 py-1"
           >
+            <div className="canvas-menu-heading">{t("canvasMenu.title")}</div>
+            <button
+              type="button"
+              role="menuitem"
+              className="canvas-menu-action"
+              onClick={() => {
+                setModeMenuOpen(false);
+                window.dispatchEvent(new Event("talweg:open-search"));
+              }}
+            >
+              <Search size={15} />
+              <span>{t("navigation.open")}</span>
+              <kbd>⌘ / Ctrl F</kbd>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="canvas-menu-action"
+              onClick={() => {
+                onZoomToFit();
+                setModeMenuOpen(false);
+              }}
+            >
+              <Scan size={15} />
+              <span>{t("actions.zoomToFit")}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={snapToGrid}
+              className="canvas-menu-action canvas-menu-snap"
+              onClick={() => {
+                onSnapToGrid(!snapToGrid);
+              }}
+            >
+              <Grid2X2 size={15} />
+              <span>{t("canvasMenu.snap")}</span>
+              <span className="canvas-menu-switch" data-enabled={snapToGrid}>
+                <i />
+              </span>
+            </button>
+            <div className="canvas-menu-heading canvas-menu-divider">
+              {t("canvasMenu.drawing")}
+            </div>
             {MODES.map((candidate) => {
               const Icon = candidate.icon;
               const isActive = mode === candidate.id;

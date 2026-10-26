@@ -206,6 +206,14 @@ export function RichText({
     if (autoFocus && editing) editorRef.current?.focus();
   }, [autoFocus, editing]);
 
+  useLayoutEffect(() => {
+    if (!editing) return;
+    window.dispatchEvent(new Event("talweg:text-edit-boundary"));
+    return () => {
+      window.dispatchEvent(new Event("talweg:text-edit-boundary"));
+    };
+  }, [editing]);
+
   useEffect(() => {
     if (!selection) return;
     const dismiss = (event: PointerEvent) => {

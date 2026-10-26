@@ -40,7 +40,10 @@ import type {
   DragState,
   ToolType,
 } from "../types.js";
-import { buildPortSlotMap } from "../utils/connectorGeometry.js";
+import {
+  buildPortSlotMap,
+  stabilizeConnections,
+} from "../utils/connectorGeometry.js";
 import { useTranslation } from "../hooks/useTranslation.js";
 import { useCanvasGestures } from "../hooks/useCanvasGestures.js";
 import { pageNodes } from "../utils/pageNodes.js";
@@ -64,6 +67,7 @@ interface CanvasProps {
   activeTool: ToolType;
   onSelectTool: (tool: ToolType) => void;
   mode: CanvasMode;
+  snapToGrid: boolean;
   selectedNodeIds: ReadonlySet<NodeId>;
   onSelectNodeIds: React.Dispatch<React.SetStateAction<ReadonlySet<NodeId>>>;
   onAddNode: (node: CanvasNode) => void;
@@ -112,7 +116,23 @@ function aabbIntersects(a: BoundingBox, b: BoundingBox): boolean {
   );
 }
 
-const snap16 = (value: number): number => Math.round(value / 16) * 16;
+function selectionTarget(
+  document: CanvasDocument | null,
+  id: NodeId,
+  direct: boolean,
+): NodeId {
+  if (direct) return id;
+  const visited = new Set<NodeId>();
+  let parent = document?.nodes[id]?.parentId;
+  while (parent && !visited.has(parent)) {
+    const group = document?.nodes[parent];
+    if (group?.type !== "group") break;
+    visited.add(parent);
+    id = parent;
+    parent = group.parentId;
+  }
+  return id;
+}
 
 const EMPTY_PORT_SLOTS: ReadonlyMap<string, Anchor> = new Map();
 
@@ -125,6 +145,7 @@ export function Canvas({
   activeTool,
   onSelectTool,
   mode,
+  snapToGrid,
   selectedNodeIds,
   onSelectNodeIds,
   onAddNode,
@@ -160,6 +181,11 @@ export function Canvas({
     [storedDocument],
   );
   const { theme } = useTheme();
+  const gridStep = mode === "diagrams" ? 16 : 24;
+  const snap = useCallback(
+    (value: number) => Math.round(value / gridStep) * gridStep,
+    [gridStep],
+  );
   const [hintDismissed, setHintDismissed] = useState(false);
   useEffect(() => {
     const dismiss = (event: Event) => {
@@ -207,7 +233,6 @@ export function Canvas({
   );
   const [connectingSourceAnchor, setConnectingSourceAnchor] =
     useState<CompassAnchor | null>(null);
-  const [hoveredArrowId, setHoveredArrowId] = useState<NodeId | null>(null);
   const [labelLayer, setLabelLayer] = useState<SVGSVGElement | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
@@ -341,11 +366,22 @@ export function Canvas({
       }
       const node = createCanvasNode(tool, worldPoint, mode, theme);
       if (!node) return false;
-      onAddNode(node);
+      onAddNode(
+        snapToGrid ? { ...node, x: snap(node.x), y: snap(node.y) } : node,
+      );
       onSelectTool("select");
       return true;
     },
-    [mode, onAddNode, onSelectTool, camera, containerRef, theme],
+    [
+      mode,
+      onAddNode,
+      onSelectTool,
+      camera,
+      containerRef,
+      theme,
+      snapToGrid,
+      snap,
+    ],
   );
 
   const startStroke = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -539,8 +575,8 @@ export function Canvas({
       for (const [id, initPos] of dragState.initialNodePositions.entries()) {
         const rawX = initPos.x + deltaWorld.x;
         const rawY = initPos.y + deltaWorld.y;
-        const posX = mode === "diagrams" ? snap16(rawX) : Math.round(rawX);
-        const posY = mode === "diagrams" ? snap16(rawY) : Math.round(rawY);
+        const posX = snapToGrid ? snap(rawX) : rawX;
+        const posY = snapToGrid ? snap(rawY) : rawY;
         updated.set(id, { x: posX, y: posY });
       }
       setDragOffsets(updated);
@@ -570,13 +606,13 @@ export function Canvas({
       );
 
       let finalBox = result.box;
-      if (mode === "diagrams") {
+      if (snapToGrid) {
         finalBox = {
           ...finalBox,
-          x: snap16(finalBox.x),
-          y: snap16(finalBox.y),
-          width: Math.max(32, snap16(finalBox.width)),
-          height: Math.max(32, snap16(finalBox.height)),
+          x: snap(finalBox.x),
+          y: snap(finalBox.y),
+          width: Math.max(32, snap(finalBox.width)),
+          height: Math.max(32, snap(finalBox.height)),
         };
       }
 
@@ -720,6 +756,7 @@ export function Canvas({
         return;
       }
 
+      id = selectionTarget(document, id, e.ctrlKey || e.metaKey);
       const nextSelected = e.shiftKey
         ? selectedNodeIds.has(id)
           ? new Set([...selectedNodeIds].filter((selected) => selected !== id))
@@ -774,7 +811,11 @@ export function Canvas({
   // Merge live drag and resize positions into scene for instant reactive rendering, filtered by activePageId
   const renderedDocument: CanvasDocument | null = useMemo(() => {
     if (!document) return null;
-    const modifiedNodes = pageNodes(document, activePageId);
+    const stable =
+      dragOffsets.size || resizeOffsets
+        ? stabilizeConnections(document)
+        : document;
+    const modifiedNodes = pageNodes(stable, activePageId);
 
     if (dragOffsets.size > 0) {
       Object.assign(
@@ -827,19 +868,7 @@ export function Canvas({
     );
   }, [renderedDocument, selectedNodeIds]);
 
-  const arrowsWithHandles = useMemo(() => {
-    if (!renderedDocument) return [];
-    const ids = new Set<NodeId>(selectedArrows.map((a) => a.id));
-    if (
-      hoveredArrowId &&
-      renderedDocument.nodes[hoveredArrowId]?.type === "arrow"
-    ) {
-      ids.add(hoveredArrowId);
-    }
-    return Array.from(ids)
-      .map((id) => renderedDocument.nodes[id] as ArrowNode)
-      .filter(Boolean);
-  }, [renderedDocument, selectedArrows, hoveredArrowId]);
+  const arrowsWithHandles = selectedArrows.length === 1 ? selectedArrows : [];
 
   // Dot grid parameters: 16px in diagrams mode, 24px in whiteboard/mindmap
   const gridBase = mode === "diagrams" ? 16 : 24;
@@ -888,7 +917,10 @@ export function Canvas({
           e.target instanceof Element
             ? e.target.closest("[data-node-id]")
             : null;
-        const nodeId = target?.getAttribute("data-node-id") as NodeId | null;
+        const clickedId = target?.getAttribute("data-node-id") as NodeId | null;
+        const nodeId = clickedId
+          ? selectionTarget(document, clickedId, e.ctrlKey || e.metaKey)
+          : null;
         if (nodeId && !selectedNodeIds.has(nodeId))
           onSelectNodeIds(new Set([nodeId]));
         if (!nodeId) onSelectNodeIds(new Set());
@@ -957,7 +989,8 @@ export function Canvas({
                     worldPoint: toWorld(point.x, point.y),
                   });
                 }}
-                onHoverArrow={setHoveredArrowId}
+                zoom={camera.zoom}
+                isPanActive={isSpacePressed || activeTool === "pan"}
               />
             ))}
           </svg>
@@ -1045,6 +1078,7 @@ export function Canvas({
           {arrowsWithHandles.length > 0 && (
             <ArrowSelectionOverlay
               arrows={arrowsWithHandles}
+              isPanActive={isSpacePressed || activeTool === "pan"}
               document={renderedDocument}
               portSlots={portSlots}
               zoom={camera.zoom}

@@ -95,8 +95,9 @@ test("groups move together, duplicate internal connections, reload, export, ungr
   ).toHaveValue("Request handling");
   expect((await position(api)).x).toBe(beforeApi.x + dx);
   await page
-    .getByRole("button", { name: "Find in project", exact: true })
+    .getByRole("button", { name: "Canvas settings", exact: true })
     .click();
+  await page.getByRole("menuitem", { name: /Find in project/ }).click();
   await page
     .getByRole("complementary", { name: "Project navigator", exact: true })
     .getByRole("button", { name: "Request handling", exact: true })
@@ -214,6 +215,90 @@ test("project search finds note content across pages and navigates to shapes and
     .getByRole("button", { name: "Close navigator", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Find in project", exact: true }),
+    page.getByRole("button", { name: "Canvas settings", exact: true }),
   ).toBeVisible();
+});
+
+test("diagram objects move freely until grid snapping is explicitly enabled", async ({
+  page,
+}) => {
+  await diagram(page);
+  const settings = page.getByRole("button", {
+    name: "Canvas settings",
+    exact: true,
+  });
+  await settings.click();
+  await page.getByRole("menuitemradio", { name: /^Diagrams/ }).click();
+  const api = shape(page, "API Gateway");
+  const before = await position(api);
+  const zoom = await page
+    .getByTestId("canvas-world")
+    .evaluate(
+      (element) => new DOMMatrix(getComputedStyle(element).transform).a,
+    );
+  const box = await api.boundingBox();
+  if (!box) throw new Error("Missing shape");
+  await page.mouse.move(box.x + 25, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 30, box.y + 20, { steps: 3 });
+  await page.mouse.up();
+  expect(
+    Math.abs((await position(api)).x - before.x - 5 / zoom),
+  ).toBeLessThanOrEqual(1);
+  await settings.click();
+  const snap = page.getByRole("menuitemcheckbox", {
+    name: "Snap to grid",
+    exact: true,
+  });
+  await expect(snap).toHaveAttribute("aria-checked", "false");
+  await snap.click();
+  await expect(snap).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
+  const snapped = await api.boundingBox();
+  if (!snapped) throw new Error("Missing shape");
+  await page.mouse.move(snapped.x + 25, snapped.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(snapped.x + 44, snapped.y + 29, { steps: 3 });
+  await page.mouse.up();
+  expect((await position(api)).x % 16).toBe(0);
+  expect((await position(api)).y % 16).toBe(0);
+  await page.reload();
+  await settings.click();
+  await expect(snap).toHaveAttribute("aria-checked", "true");
+});
+
+test("grouping from the context menu lets any member move the entire group", async ({
+  page,
+}) => {
+  await diagram(page);
+  const api = shape(page, "API Gateway");
+  const auth = shape(page, "Auth Service");
+  await select(page, ["API Gateway", "Auth Service"]);
+  await api.click({ button: "right", position: { x: 30, y: 20 } });
+  await page.getByRole("button", { name: "Group", exact: true }).click();
+  const group = page.getByTestId("canvas-group");
+  await expect(group).toHaveCount(1);
+  const beforeApi = await position(api);
+  const beforeAuth = await position(auth);
+  const box = await api.boundingBox();
+  if (!box) throw new Error("Missing member");
+  const zoom = await page
+    .getByTestId("canvas-world")
+    .evaluate(
+      (element) => new DOMMatrix(getComputedStyle(element).transform).a,
+    );
+  await page.mouse.move(box.x + 30, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 100, box.y + 55, { steps: 5 });
+  await page.mouse.up();
+  const dx = (await position(api)).x - beforeApi.x;
+  expect(Math.abs(dx - 70 / zoom)).toBeLessThanOrEqual(1);
+  expect((await position(auth)).x - beforeAuth.x).toBe(dx);
+  await expect(group).toHaveAttribute("data-selected", "true");
+  await api.click({ position: { x: 30, y: 20 }, modifiers: ["ControlOrMeta"] });
+  await expect(group).toHaveAttribute("data-selected", "false");
+  await api.click({ button: "right", position: { x: 30, y: 20 } });
+  await page.getByRole("button", { name: "Ungroup", exact: true }).click();
+  await expect(group).toHaveCount(0);
+  expect((await position(api)).x).toBe(beforeApi.x + dx);
 });

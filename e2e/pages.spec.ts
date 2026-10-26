@@ -40,7 +40,7 @@ test("legacy template nodes stay on their own page through edits, reload and exp
   await expect(nodes).toHaveCount(1);
   await expect(nodes).toContainText("Second page only");
   await nodes.click();
-  await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
+  await page.getByRole("button", { name: "Canvas settings", exact: true }).click();
   await page.getByRole("menuitemradio", { name: /^Mindmap/ }).click();
   await page.getByRole("button", { name: "Add Subtopic (Tab)", exact: true }).click();
   await expect(nodes).toHaveCount(2);

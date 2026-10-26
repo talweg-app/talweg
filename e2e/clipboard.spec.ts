@@ -110,6 +110,17 @@ test("middle-button panning cancels native paste over nodes and text editors", a
       { steps: 5 },
     );
     await page.mouse.up({ button: "middle" });
+    await page.evaluate(() => {
+      const data = new DataTransfer();
+      data.setData("text/plain", "Unwanted primary selection");
+      document.activeElement?.dispatchEvent(
+        new ClipboardEvent("paste", {
+          clipboardData: data,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
     await expect.poll(() => new URL(page.url()).hash).not.toBe(before);
     await expect(node).toHaveCount(1);
     await expect(node).toContainText("Original text");

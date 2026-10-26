@@ -2675,3 +2675,88 @@
 .session-members > button:not(:disabled):hover {
   color: var(--ink);
 }
+
+.canvas-mode-picker > button {
+  gap: 9px;
+  color: var(--ink-muted);
+  background: transparent;
+  border-color: transparent;
+}
+.canvas-mode-picker > button:hover,
+.canvas-mode-picker > button[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--workspace-line);
+  background: var(--workspace-bg);
+}
+.canvas-mode-menu {
+  min-width: 286px;
+  padding: 7px;
+}
+.canvas-menu-heading {
+  padding: 8px 10px 6px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.canvas-menu-divider {
+  border-top: 1px solid var(--workspace-line);
+  margin-top: 5px;
+  padding-top: 12px;
+}
+.canvas-mode-menu > .canvas-menu-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+.canvas-menu-action > svg {
+  color: var(--ink-muted);
+}
+.canvas-mode-menu > button:hover {
+  background: var(--workspace-hover);
+}
+.canvas-menu-action kbd {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+.canvas-menu-switch {
+  display: flex;
+  align-items: center;
+  width: 27px;
+  height: 16px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 12px;
+  background: var(--workspace-line);
+}
+.canvas-menu-switch i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+.canvas-menu-switch[data-enabled="true"] {
+  background: var(--accent);
+}
+.canvas-menu-switch[data-enabled="true"] i {
+  transform: translateX(11px);
+  background: var(--workspace-bg);
+}
+.canvas-group[data-selected="true"] {
+  border-style: solid;
+}
+@media (max-width: 600px) {
+  .canvas-mode-menu {
+    min-width: 0;
+    width: min(286px, calc(100vw - 20px));
+  }
+}

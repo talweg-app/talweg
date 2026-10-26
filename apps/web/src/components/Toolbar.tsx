@@ -28,6 +28,7 @@ interface ToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   hasSelection: boolean;
+  canBranch: boolean;
   onDeleteSelected: () => void;
   onAddMindmapChild?: () => void;
   onAddMindmapSibling?: () => void;
@@ -87,12 +88,25 @@ export function Toolbar({
   onUndo,
   onRedo,
   hasSelection,
+  canBranch,
   onDeleteSelected,
   onAddMindmapChild,
   onAddMindmapSibling,
 }: ToolbarProps) {
   const { t } = useTranslation();
 
+  const shapeId =
+    activeTool === "diamond" ||
+    activeTool === "capsule" ||
+    activeTool === "cylinder"
+      ? activeTool
+      : "rectangle";
+  const shapeIcons = {
+    rectangle: Square,
+    diamond: Diamond,
+    capsule: Pill,
+    cylinder: Database,
+  };
   const tools = (() => {
     const baseTools = [
       {
@@ -115,67 +129,13 @@ export function Toolbar({
       },
     ];
 
-    if (mode === "diagrams") {
-      return [
-        ...baseTools,
-        {
-          id: "rectangle" as ToolType,
-          label: t("tools.rectangle"),
-          tooltip: t("tooltips.rectangle"),
-          icon: Square,
-        },
-        {
-          id: "diamond" as ToolType,
-          label: t("tools.diamond"),
-          tooltip: t("tooltips.diamond"),
-          icon: Diamond,
-        },
-        {
-          id: "capsule" as ToolType,
-          label: t("tools.capsule"),
-          tooltip: t("tooltips.capsule"),
-          icon: Pill,
-        },
-        {
-          id: "cylinder" as ToolType,
-          label: t("tools.cylinder"),
-          tooltip: t("tooltips.cylinder"),
-          icon: Database,
-        },
-        {
-          id: "arrow" as ToolType,
-          label: t("tools.arrow"),
-          tooltip: t("tooltips.arrow"),
-          icon: ArrowUpRight,
-        },
-      ];
-    }
-
-    if (mode === "mindmap") {
-      return [
-        ...baseTools,
-        {
-          id: "rectangle" as ToolType,
-          label: t("tools.rectangle"),
-          tooltip: t("tooltips.rectangle"),
-          icon: Square,
-        },
-        {
-          id: "arrow" as ToolType,
-          label: t("tools.arrow"),
-          tooltip: t("tooltips.arrow"),
-          icon: ArrowUpRight,
-        },
-      ];
-    }
-
     return [
       ...baseTools,
       {
-        id: "rectangle" as ToolType,
-        label: t("tools.rectangle"),
-        tooltip: t("tooltips.rectangle"),
-        icon: Square,
+        id: shapeId as ToolType,
+        label: t(`tools.${shapeId}`),
+        tooltip: t(`tooltips.${shapeId}`),
+        icon: shapeIcons[shapeId],
       },
       {
         id: "arrow" as ToolType,
@@ -205,7 +165,7 @@ export function Toolbar({
         );
       })}
 
-      {mode === "mindmap" && hasSelection && (
+      {mode === "mindmap" && canBranch && (
         <>
           <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
           <ToolbarButton

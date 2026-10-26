@@ -24,10 +24,10 @@ test("system appearance follows the OS and an explicit choice persists across sc
   await appearance.selectOption("light");
   await blank(page);
   await expect(page.getByTestId("canvas")).toHaveCSS("background-color", "rgb(247, 247, 244)");
-  await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
+  await page.getByRole("button", { name: "Canvas settings", exact: true }).click();
   const selectedMode = page.getByTestId("mode-picker-menu").getByText("Whiteboard", { exact: true });
   expect(contrastRatio(await selectedMode.evaluate(element => getComputedStyle(element).color), "#ffffff")).toBeGreaterThanOrEqual(4.5);
-  await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
+  await page.getByRole("button", { name: "Canvas settings", exact: true }).click();
   const node = await insert(page, "Rectangle");
   await expect(node.getByTestId("node-surface")).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await page.reload();
@@ -165,7 +165,7 @@ test("appearance and file controls remain reachable on a narrow canvas", async (
     page.getByRole("combobox", { name: "Language / Язык", exact: true }),
     page.getByRole("button", { name: "Save Document (Ctrl+S)", exact: true }),
     page.getByRole("button", { name: "Download PNG", exact: true }),
-    page.getByRole("button", { name: "Whiteboard", exact: true }),
+    page.getByRole("button", { name: "Canvas settings", exact: true }),
   ]) {
     const box = await control.boundingBox();
     expect(box).not.toBeNull();
@@ -173,7 +173,7 @@ test("appearance and file controls remain reachable on a narrow canvas", async (
   }
   await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
   await expect(page.getByTestId("canvas")).toHaveCSS("background-color", "rgb(247, 247, 244)");
-  await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
+  await page.getByRole("button", { name: "Canvas settings", exact: true }).click();
   const menu = await page.getByTestId("mode-picker-menu").boundingBox();
   expect(menu).not.toBeNull();
   if (menu) { expect(menu.x).toBeGreaterThanOrEqual(0); expect(menu.x + menu.width).toBeLessThanOrEqual(320); }
