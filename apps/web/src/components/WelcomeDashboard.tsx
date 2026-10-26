@@ -1,3 +1,4 @@
+import { SettingsTrigger } from "./AppSettings.js";
 import { JoinSession } from "./JoinSession.js";
 import type { LibraryIndex } from "../types/projectLibrary.js";
 import { ProjectStorageAdapter } from "../utils/projectStorage.js";
@@ -333,6 +334,7 @@ export function WelcomeDashboard({
         </div>
         <div className="workspace-header-actions">
           <div className="workspace-preferences">
+            <SettingsTrigger />
             <ThemePicker />
             <JoinSession />
             <LanguagePicker />

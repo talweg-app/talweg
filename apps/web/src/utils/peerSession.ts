@@ -1,3 +1,4 @@
+import { readPreferences } from "./preferences.js";
 import { FRAGMENT_PREFIX, parseFragment } from "./canvasClipboard.js";
 import * as Y from "yjs";
 import type { MessageAction, Room } from "trystero";
@@ -77,6 +78,7 @@ export class PeerSession {
   private control: MessageAction<string> | undefined;
   private selfId = "";
   private hostId = "";
+  private readonly guestLimit = readPreferences().guestLimit;
   private closed = false;
   private terminal = false;
   private phaseValue: PeerPhase = "connecting";
@@ -181,10 +183,9 @@ export class PeerSession {
       : await import("trystero");
     if (this.closed) return;
     this.selfId = sdk.selfId;
-    const ownName = (
-      localStorage.getItem("talweg_display_name") ??
-      (this.state.host ? "Host" : "Guest")
-    ).slice(0, 40);
+    const ownName =
+      readPreferences().displayName.trim() ||
+      (this.state.host ? "Host" : "Guest");
     this.members.set(this.selfId, {
       id: this.selfId,
       name: ownName,
@@ -314,7 +315,7 @@ export class PeerSession {
             this.room?.getPeers()[previousPeer]?.close();
             this.forgetPeer(previousPeer);
           }
-          if (this.accepted.size + this.approvals.size >= 3) {
+          if (this.accepted.size + this.approvals.size >= this.guestLimit) {
             await send(JSON.stringify({ accepted: false, reason: "full" }));
             throw new Error("Full");
           }
@@ -407,7 +408,7 @@ export class PeerSession {
         }
       },
     };
-    let iceServers: RTCIceServer[] = [];
+    let iceServers: RTCIceServer[] = readPreferences().iceServers;
     try {
       const response = await fetch("/api/peer-config", {
         signal: AbortSignal.timeout(3000),
@@ -416,7 +417,8 @@ export class PeerSession {
         const config = (await response.json()) as {
           iceServers?: RTCIceServer[];
         };
-        if (Array.isArray(config.iceServers)) iceServers = config.iceServers;
+        if (!iceServers.length && Array.isArray(config.iceServers))
+          iceServers = config.iceServers;
       }
     } catch {
       /* default STUN servers remain available */

@@ -224,6 +224,17 @@ export function Header({
               className="canvas-menu-action"
               onClick={() => {
                 setModeMenuOpen(false);
+                window.dispatchEvent(new Event("talweg:open-settings"));
+              }}
+            >
+              {t("settings.title")} <kbd>Ctrl+,</kbd>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="canvas-menu-action"
+              onClick={() => {
+                setModeMenuOpen(false);
                 window.dispatchEvent(new Event("talweg:open-search"));
               }}
             >

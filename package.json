@@ -12,7 +12,11 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "desktop:start": "pnpm build && pnpm --filter @talweg/desktop start",
+    "desktop:linux": "pnpm build && pnpm --filter @talweg/desktop package:linux",
+    "desktop:windows": "pnpm build && pnpm --filter @talweg/desktop package:windows",
+    "desktop:dir": "pnpm build && pnpm --filter @talweg/desktop package:dir"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

@@ -11,6 +11,13 @@ async function request(path: string, options?: RequestInit): Promise<Response> {
   return fetch(`/api/projects${path}`, { ...options, cache: "no-store", signal: AbortSignal.timeout(8000) });
 }
 
+const openAdapters = new Set<ProjectStorageAdapter>();
+export async function flushProjectWrites(): Promise<void> {
+  for (const adapter of openAdapters) {
+    await adapter.flush();
+    if (adapter.hasPendingWrites) throw new Error("Project files could not be saved");
+  }
+}
 export class ProjectStorageAdapter extends IndexedDBStorageAdapter {
   library: LibraryIndex | null = null;
   private localWrites: Promise<void> = Promise.resolve();
@@ -25,7 +32,7 @@ export class ProjectStorageAdapter extends IndexedDBStorageAdapter {
     for (const id of ids) this.seen.add(id);
     try { localStorage.setItem(`talweg_library_seen:${this.library?.directory ?? ""}`, JSON.stringify([...this.seen])); } catch { /* the current session still tracks migrated projects */ }
   }
-  constructor(private readonly onState?: (state: LibraryState) => void) { super(); }
+  constructor(private readonly onState?: (state: LibraryState) => void) { super(); openAdapters.add(this); }
 
   override async initialize(): Promise<void> {
     await super.initialize();
@@ -213,5 +220,6 @@ export class ProjectStorageAdapter extends IndexedDBStorageAdapter {
     await this.flush();
     clearTimeout(this.timer);
     await super.close();
+    openAdapters.delete(this);
   }
 }

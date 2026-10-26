@@ -1,3 +1,4 @@
+import { readPreferences } from "../utils/preferences.js";
 import {
   useEffect,
   type Dispatch,
@@ -62,7 +63,13 @@ export function useCanvasGestures(
         return;
       }
 
+      const behavior = readPreferences().wheel;
+      if (behavior === "zoom") {
+        zoomAtCursor(event.clientX, event.clientY, Math.exp(-dy * 0.0015));
+        return;
+      }
       const isTrackpadScroll =
+        behavior === "pan" ||
         event.deltaX !== 0 ||
         (event.deltaMode === 0 &&
           (event.deltaY % 1 !== 0 || Math.abs(event.deltaY) < 40));

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { usePreferences } from "../hooks/usePreferences.js";
+import { updatePreferences } from "../utils/preferences.js";
 import {
   computeGroupBounds,
   zoomToBounds,
@@ -30,20 +31,10 @@ export default function CanvasView({
   onOpenDashboard,
 }: CanvasViewProps) {
   const { t } = useTranslation();
-  const [snapToGrid, setSnapToGrid] = useState(() => {
-    try {
-      return localStorage.getItem("talweg_snap_to_grid") === "true";
-    } catch {
-      return false;
-    }
-  });
+  const preferences = usePreferences();
+  const snapToGrid = preferences.snapToGrid;
   const changeSnapping = (value: boolean) => {
-    setSnapToGrid(value);
-    try {
-      localStorage.setItem("talweg_snap_to_grid", String(value));
-    } catch {
-      /* keep the current preference for this session */
-    }
+    updatePreferences({ snapToGrid: value });
   };
   const {
     collaboration,
@@ -342,56 +333,57 @@ export default function CanvasView({
             </div>
           )}
           <div className="remote-presence-layer" aria-hidden="true">
-            {collaboration.participants
-              ?.filter(
-                (peer) =>
-                  peer.id !== collaboration.selfId &&
-                  peer.pageId === activePageId,
-              )
-              .map((peer) => (
-                <div key={peer.id}>
-                  {peer.x !== null && peer.y !== null && (
-                    <div
-                      className="remote-cursor"
-                      data-testid="remote-cursor"
-                      style={{
-                        left: (peer.x + camera.x) * camera.zoom,
-                        top: (peer.y + camera.y) * camera.zoom,
-                        color: peer.color,
-                      }}
-                    >
-                      <svg width="15" height="20" viewBox="0 0 15 20">
-                        <path
-                          d="M1 1L13 12L7 13L4 18Z"
-                          fill="currentColor"
-                          stroke="var(--canvas-bg)"
-                        />
-                      </svg>
-                      <span style={{ background: peer.color }}>
-                        {peer.name}
-                      </span>
-                    </div>
-                  )}
-                  {peer.selected.map((id) => {
-                    const node = document
-                      ? worldDocument(document).nodes[id as NodeId]
-                      : undefined;
-                    return node && node.type !== "arrow" ? (
+            {preferences.showCursors &&
+              collaboration.participants
+                ?.filter(
+                  (peer) =>
+                    peer.id !== collaboration.selfId &&
+                    peer.pageId === activePageId,
+                )
+                .map((peer) => (
+                  <div key={peer.id}>
+                    {peer.x !== null && peer.y !== null && (
                       <div
-                        key={id}
-                        className="remote-selection"
+                        className="remote-cursor"
+                        data-testid="remote-cursor"
                         style={{
-                          left: (node.x + camera.x) * camera.zoom,
-                          top: (node.y + camera.y) * camera.zoom,
-                          width: node.width * camera.zoom,
-                          height: node.height * camera.zoom,
-                          borderColor: peer.color,
+                          left: (peer.x + camera.x) * camera.zoom,
+                          top: (peer.y + camera.y) * camera.zoom,
+                          color: peer.color,
                         }}
-                      />
-                    ) : null;
-                  })}
-                </div>
-              ))}
+                      >
+                        <svg width="15" height="20" viewBox="0 0 15 20">
+                          <path
+                            d="M1 1L13 12L7 13L4 18Z"
+                            fill="currentColor"
+                            stroke="var(--canvas-bg)"
+                          />
+                        </svg>
+                        <span style={{ background: peer.color }}>
+                          {peer.name}
+                        </span>
+                      </div>
+                    )}
+                    {peer.selected.map((id) => {
+                      const node = document
+                        ? worldDocument(document).nodes[id as NodeId]
+                        : undefined;
+                      return node && node.type !== "arrow" ? (
+                        <div
+                          key={id}
+                          className="remote-selection"
+                          style={{
+                            left: (node.x + camera.x) * camera.zoom,
+                            top: (node.y + camera.y) * camera.zoom,
+                            width: node.width * camera.zoom,
+                            height: node.height * camera.zoom,
+                            borderColor: peer.color,
+                          }}
+                        />
+                      ) : null;
+                    })}
+                  </div>
+                ))}
           </div>
           <Toolbar
             onOpenInsert={() =>

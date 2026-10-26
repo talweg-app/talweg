@@ -3,6 +3,8 @@ packages:
   - "packages/*"
 allowBuilds:
   esbuild: true
+  electron: true
+  electron-winstaller: false
 minimumReleaseAgeExclude:
   - "@turbo/darwin-64@2.11.10"
   - "@turbo/darwin-arm64@2.11.10"

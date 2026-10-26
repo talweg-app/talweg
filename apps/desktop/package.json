@@ -1,0 +1,81 @@
+{
+  "name": "@talweg/desktop",
+  "version": "0.1.0",
+  "description": "A local workspace for diagrams, ideas and plans",
+  "author": {
+    "name": "ivanchik-byte",
+    "email": "233426295+ivanchik-byte@users.noreply.github.com"
+  },
+  "private": true,
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "electron .",
+    "package:linux": "electron-builder --linux AppImage deb --publish never",
+    "package:windows": "electron-builder --win nsis --publish never",
+    "package:dir": "electron-builder --dir --publish never",
+    "test:smoke": "node smoke.mjs",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "@talweg/storage": "workspace:*"
+  },
+  "build": {
+    "appId": "app.talweg.desktop",
+    "productName": "Talweg",
+    "directories": {
+      "output": "../../release"
+    },
+    "files": [
+      "dist/**",
+      "package.json",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Talweg invitation",
+        "schemes": [
+          "talweg"
+        ]
+      }
+    ],
+    "linux": {
+      "category": "Office",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "executableName": "talweg",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "Talweg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "artifactName": "Talweg-${version}-${os}-${arch}.${ext}",
+    "deb": {
+      "packageName": "talweg"
+    }
+  },
+  "desktopName": "talweg.desktop",
+  "homepage": "https://github.com/talweg-app/talweg"
+}

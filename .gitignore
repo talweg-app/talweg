@@ -13,3 +13,6 @@ playwright-report/
 
 # agent context stays in .infoslop
 /.agents/
+
+# desktop installers
+/release/

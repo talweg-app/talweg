@@ -1,11 +1,10 @@
+import { AppSettings } from "./components/AppSettings.js";
+import { persistClientValue } from "./utils/preferences.js";
 import { ProjectStorageAdapter } from "./utils/projectStorage.js";
 import { lazy, Suspense, useEffect } from "react";
 import * as Y from "yjs";
 import type { CanvasDocument, DocumentId } from "@talweg/core";
-import {
-  applyDocumentToYDoc,
-  createSceneDoc,
-} from "@talweg/storage";
+import { applyDocumentToYDoc, createSceneDoc } from "@talweg/storage";
 import { WelcomeDashboard } from "./components/WelcomeDashboard.js";
 import { LanguageProvider } from "./i18n.js";
 import { useRoute } from "./routes/router.js";
@@ -20,7 +19,8 @@ export function App() {
 
   useEffect(() => {
     if (route.type === "board") {
-      localStorage.setItem("talweg_active_doc", route.boardId);
+      if (!route.boardId.startsWith("room-"))
+        persistClientValue("talweg_active_doc", route.boardId);
     }
   }, [route]);
 
@@ -30,7 +30,8 @@ export function App() {
   };
 
   const handleCreateFromTemplate = async (templateDoc: CanvasDocument) => {
-    if (Object.keys(templateDoc.nodes).length > 0) markTemplateDraft(templateDoc.id);
+    if (Object.keys(templateDoc.nodes).length > 0)
+      markTemplateDraft(templateDoc.id);
     const tempYdoc = createSceneDoc();
     applyDocumentToYDoc(templateDoc, tempYdoc);
     const stateVector = Y.encodeStateVector(tempYdoc);
@@ -64,27 +65,37 @@ export function App() {
 
   return (
     <LanguageProvider>
-      {route.type === "dashboard" ? (
-        <WelcomeDashboard
-          isStandalone
-          onSelectBoard={handleSelectBoard}
-          onCreateFromTemplate={(template) => {
-            void handleCreateFromTemplate(template);
-          }}
-          onImportSuccess={handleImportSuccess}
-        />
-      ) : (
-        <Suspense fallback={
-          <div className="w-screen h-screen bg-[var(--canvas-bg)]" role="status" aria-label="Loading canvas" />
-        }>
-          <CanvasView
-            key={route.boardId}
-            documentId={route.boardId}
-            pageId={route.pageId}
-            onOpenDashboard={() => { navigate("/"); }}
+      <AppSettings>
+        {route.type === "dashboard" ? (
+          <WelcomeDashboard
+            isStandalone
+            onSelectBoard={handleSelectBoard}
+            onCreateFromTemplate={(template) => {
+              void handleCreateFromTemplate(template);
+            }}
+            onImportSuccess={handleImportSuccess}
           />
-        </Suspense>
-      )}
+        ) : (
+          <Suspense
+            fallback={
+              <div
+                className="w-screen h-screen bg-[var(--canvas-bg)]"
+                role="status"
+                aria-label="Loading canvas"
+              />
+            }
+          >
+            <CanvasView
+              key={route.boardId}
+              documentId={route.boardId}
+              pageId={route.pageId}
+              onOpenDashboard={() => {
+                navigate("/");
+              }}
+            />
+          </Suspense>
+        )}
+      </AppSettings>
     </LanguageProvider>
   );
 }

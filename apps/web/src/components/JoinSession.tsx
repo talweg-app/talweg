@@ -1,3 +1,4 @@
+import { updatePreferences } from "../utils/preferences.js";
 import { useRef, useState } from "react";
 import { Users, X } from "lucide-react";
 import { parseInvitation, rememberInvitation } from "../utils/invitation.js";
@@ -52,10 +53,7 @@ export function JoinSession() {
               try {
                 const invitation = parseInvitation(text);
                 try {
-                  localStorage.setItem(
-                    "talweg_display_name",
-                    name.trim() || "Guest",
-                  );
+                  updatePreferences({ displayName: name.trim() || "Guest" });
                 } catch {
                   /* joining also works without a saved display name */
                 }

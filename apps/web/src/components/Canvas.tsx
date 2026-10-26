@@ -1,3 +1,4 @@
+import { usePreferences } from "../hooks/usePreferences.js";
 import { createFreehand } from "../utils/freehand.js";
 import { FreehandRenderer } from "./FreehandRenderer.js";
 import { PenSettings } from "./PenSettings.js";
@@ -178,6 +179,7 @@ export function Canvas({
   onDeletePage,
 }: CanvasProps) {
   const { t } = useTranslation();
+  const preferences = usePreferences();
   const document = useMemo(
     () => (storedDocument ? worldDocument(storedDocument) : null),
     [storedDocument],
@@ -954,8 +956,9 @@ export function Canvas({
       data-testid="canvas"
       className={`relative w-full h-full overflow-clip overscroll-none bg-[var(--canvas-bg)] select-none touch-none ${cursorClass}`}
       style={{
-        backgroundImage:
-          "radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)",
+        backgroundImage: preferences.grid
+          ? "radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px)"
+          : "none",
         backgroundSize: `${String(gridSize)}px ${String(gridSize)}px`,
         backgroundPosition: `${String(gridOffsetX)}px ${String(gridOffsetY)}px`,
       }}

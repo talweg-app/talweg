@@ -1,3 +1,4 @@
+import { persistClientValue } from "./utils/preferences.js";
 import {
   useCallback,
   useEffect,
@@ -28,23 +29,32 @@ function resolveTranslation(dictionary: unknown, path: string): string | null {
   return typeof current === "string" ? current : null;
 }
 
-export function LanguageProvider({ children }: { readonly children: ReactNode }) {
+export function LanguageProvider({
+  children,
+}: {
+  readonly children: ReactNode;
+}) {
   const [language, setLanguageState] = useState<Language>(() => {
     if (typeof window === "undefined") return "en";
-    const saved = localStorage.getItem(STORAGE_KEY);
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      /* use English when browser storage is unavailable */
+    }
     if (saved === "en" || saved === "ru") return saved;
     return "en";
   });
 
   const setLanguage = useCallback((next: Language) => {
     setLanguageState(next);
-    localStorage.setItem(STORAGE_KEY, next);
+    persistClientValue(STORAGE_KEY, next);
   }, []);
 
   const toggleLanguage = useCallback(() => {
     setLanguageState((prev) => {
       const next: Language = prev === "en" ? "ru" : "en";
-      localStorage.setItem(STORAGE_KEY, next);
+      persistClientValue(STORAGE_KEY, next);
       return next;
     });
   }, []);

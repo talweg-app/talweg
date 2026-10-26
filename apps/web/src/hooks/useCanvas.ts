@@ -1,3 +1,4 @@
+import { readPreferences } from "../utils/preferences.js";
 import { stabilizeConnections } from "../utils/connectorGeometry.js";
 import { copyBoard } from "../utils/copyBoard.js";
 import {
@@ -663,7 +664,7 @@ export function useCanvas(
         : {};
     const relay = config.localRelay
       ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/talweg-relay`
-      : undefined;
+      : readPreferences().relayUrl || undefined;
     const { invitation, privateKey } = await createInvitation(relay);
     const session = new PeerSession(
       scene,
@@ -722,6 +723,43 @@ export function useCanvas(
     window.addEventListener("talweg:text-edit-boundary", boundary);
     return () => {
       window.removeEventListener("talweg:text-edit-boundary", boundary);
+    };
+  }, []);
+
+  useEffect(() => {
+    const flush = (event: Event) => {
+      const scene = ydocRef.current,
+        adapter = adapterRef.current;
+      if (!scene || !adapter) return;
+      const doc = yDocToDocument(scene);
+      const pending = adapter
+        .saveSnapshot({
+          meta: {
+            documentId: doc.id,
+            name: doc.name,
+            schemaVersion: doc.schemaVersion,
+            createdAt: doc.meta.createdAt,
+            updatedAt: Date.now(),
+            nodeCount: Object.keys(doc.nodes).length,
+          },
+          clock: clockRef.current,
+          documentBlob: Y.encodeStateAsUpdate(scene),
+          stateVector: Y.encodeStateVector(scene),
+        })
+        .then(async () => {
+          await fileWritesRef.current;
+          if (adapter instanceof ProjectStorageAdapter) {
+            await adapter.flush();
+            if (adapter.hasPendingWrites) throw new Error("save");
+          }
+        });
+      (
+        event as CustomEvent<{ waitUntil: (value: Promise<unknown>) => void }>
+      ).detail.waitUntil(pending);
+    };
+    window.addEventListener("talweg:flush", flush);
+    return () => {
+      window.removeEventListener("talweg:flush", flush);
     };
   }, []);
 
