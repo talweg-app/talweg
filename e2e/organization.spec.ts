@@ -302,3 +302,73 @@ test("grouping from the context menu lets any member move the entire group", asy
   await expect(group).toHaveCount(0);
   expect((await position(api)).x).toBe(beforeApi.x + dx);
 });
+
+test("alignment guides appear while dragging without snapping and disappear on release", async ({
+  page,
+}) => {
+  await diagram(page);
+  const moving = shape(page, "Auth Service");
+  const reference = shape(page, "API Gateway");
+  const before = await position(moving);
+  const box = await moving.boundingBox();
+  const target = await reference.boundingBox();
+  if (!box || !target) throw new Error("Missing shape");
+  const zoom = await page
+    .getByTestId("canvas-world")
+    .evaluate(
+      (element) => new DOMMatrix(getComputedStyle(element).transform).a,
+    );
+  const deltaY = target.y - box.y + 2;
+  await page.mouse.move(box.x + 35, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 105, box.y + 20 + deltaY, { steps: 8 });
+  await expect(page.getByTestId("alignment-guides")).toBeVisible();
+  const preview = await position(moving);
+  expect(preview.x - before.x).toBeCloseTo(70 / zoom, 2);
+  expect(preview.y - before.y).toBeCloseTo(deltaY / zoom, 2);
+  await page.mouse.up();
+  await expect(page.getByTestId("alignment-guides")).toHaveCount(0);
+  expect(await position(moving)).toEqual(preview);
+  await page.keyboard.press("Control+z");
+  expect(await position(moving)).toEqual(before);
+});
+
+test("tidy previews immediately, cancels cleanly, applies once and survives undo and reload", async ({
+  page,
+}) => {
+  await diagram(page);
+  const names = ["API Gateway", "Auth Service", "Order Engine"];
+  const positions = () =>
+    Promise.all(names.map((name) => position(shape(page, name))));
+  const before = await positions();
+  await select(page, names);
+  const tidy = page.getByRole("button", {
+    name: "Tidy selection",
+    exact: true,
+  });
+  await tidy.hover();
+  const preview = await positions();
+  expect(preview).not.toEqual(before);
+  expect(new Set(preview.map((point) => point.x + point.width / 2)).size).toBe(
+    1,
+  );
+  const [a, b, c] = [...preview].sort((a, b) => a.y - b.y);
+  if (!a || !b || !c) throw new Error("Missing selection");
+  expect(b.y - a.y - a.height).toBe(c.y - b.y - b.height);
+  expect(b.y - a.y - a.height).toBeGreaterThanOrEqual(24);
+  await page.mouse.move(10, 25);
+  expect(await positions()).toEqual(before);
+  await page.reload();
+  expect(await positions()).toEqual(before);
+  await select(page, names);
+  await tidy.hover();
+  await page.screenshot({ path: test.info().outputPath("tidy-preview.png") });
+  await tidy.click();
+  expect(await positions()).toEqual(preview);
+  await page.keyboard.press("Control+z");
+  expect(await positions()).toEqual(before);
+  await page.keyboard.press("Control+Shift+z");
+  expect(await positions()).toEqual(preview);
+  await page.reload();
+  expect(await positions()).toEqual(preview);
+});

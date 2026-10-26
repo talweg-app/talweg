@@ -148,6 +148,58 @@ describe("organizing canvas content", () => {
       expect(new Set(values).size).toBe(1);
     },
   );
+  it("tidies into an evenly spaced row without changing order, size or the selection center", () => {
+    const before = fixture();
+    const next = alignSelection(before, ids, "tidy");
+    const [a, b, c] = [...ids].map((id) => next.nodes[id]);
+    if (!a || !b || !c) throw new Error("Missing fixture");
+    expect(
+      new Set([a.y + a.height / 2, b.y + b.height / 2, c.y + c.height / 2])
+        .size,
+    ).toBe(1);
+    expect(b.x - a.x - a.width).toBe(c.x - b.x - b.width);
+    expect(a.x).toBe(100);
+    expect(c.x + c.width).toBe(660);
+    expect(before.nodes["b" as NodeId]?.y).toBe(160);
+    expect([a.width, b.width, c.width]).toEqual([80, 120, 60]);
+  });
+  it("chooses a column for staggered wide cards instead of spreading them off to the sides", () => {
+    const before = fixture();
+    for (const [index, node] of Object.values(before.nodes).entries()) {
+      node.width = 200;
+      node.x = index ? 300 : 100;
+      node.y = [160, 50, 270][index] ?? 0;
+    }
+    const next = alignSelection(before, ids, "tidy");
+    expect(
+      new Set(Object.values(next.nodes).map((node) => node.x + node.width / 2))
+        .size,
+    ).toBe(1);
+    expect(Math.min(...Object.values(next.nodes).map((node) => node.y))).toBe(
+      50,
+    );
+    expect(
+      Math.max(
+        ...Object.values(next.nodes).map((node) => node.y + node.height),
+      ),
+    ).toBe(330);
+  });
+  it("tidies an overlapping column with usable gaps and keeps its center", () => {
+    const before = fixture();
+    for (const [index, node] of Object.values(before.nodes).entries()) {
+      node.x = index * 2 + 100;
+      node.y = index * 20;
+    }
+    const next = alignSelection(before, ids, "tidy");
+    const [a, b, c] = [...ids].map((id) => next.nodes[id]);
+    if (!a || !b || !c) throw new Error("Missing fixture");
+    expect(
+      new Set([a.x + a.width / 2, b.x + b.width / 2, c.x + c.width / 2]).size,
+    ).toBe(1);
+    expect(b.y - a.y - a.height).toBe(24);
+    expect(c.y - b.y - b.height).toBe(24);
+    expect((a.y + c.y + c.height) / 2).toBe(50);
+  });
   it("distributes equal edge gaps for differently sized nodes and preserves the outer edges", () => {
     const aligned = alignSelection(fixture(), ids, "horizontal");
     const [a, b, c] = [...ids].map((id) => aligned.nodes[id]);

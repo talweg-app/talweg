@@ -5,9 +5,11 @@ import { createId } from "../utils/template.js";
 import type { FreehandNode } from "@talweg/core";
 import {
   worldDocument,
+  alignSelection,
   movedWorldDocument,
   type Alignment,
 } from "../utils/organizeCanvas.js";
+import { alignmentGuides } from "../utils/alignmentGuides.js";
 import { GroupRenderer } from "./GroupRenderer.js";
 import { OrganizeControls } from "./OrganizeControls.js";
 import { Plus } from "lucide-react";
@@ -240,6 +242,12 @@ export function Canvas({
   const [dragOffsets, setDragOffsets] = useState<ReadonlyMap<NodeId, Point2D>>(
     new Map(),
   );
+  const [previewAlignment, setPreviewAlignment] = useState<Alignment | null>(
+    null,
+  );
+  useEffect(() => {
+    setPreviewAlignment(null);
+  }, [selectedNodeIds, activePageId]);
   const [resizeOffsets, setResizeOffsets] = useState<{
     id: NodeId;
     box: TransformBox2D;
@@ -812,10 +820,20 @@ export function Canvas({
   const renderedDocument: CanvasDocument | null = useMemo(() => {
     if (!document) return null;
     const stable =
-      dragOffsets.size || resizeOffsets
+      dragOffsets.size || resizeOffsets || previewAlignment
         ? stabilizeConnections(document)
         : document;
     const modifiedNodes = pageNodes(stable, activePageId);
+    if (previewAlignment && storedDocument) {
+      const preview = worldDocument(
+        alignSelection(storedDocument, selectedNodeIds, previewAlignment),
+      );
+      for (const node of Object.values(modifiedNodes)) {
+        const proposed = preview.nodes[node.id];
+        if (proposed)
+          modifiedNodes[node.id] = { ...node, x: proposed.x, y: proposed.y };
+      }
+    }
 
     if (dragOffsets.size > 0) {
       Object.assign(
@@ -842,7 +860,33 @@ export function Canvas({
       ...document,
       nodes: modifiedNodes,
     };
-  }, [document, activePageId, dragOffsets, resizeOffsets]);
+  }, [
+    document,
+    activePageId,
+    dragOffsets,
+    resizeOffsets,
+    storedDocument,
+    selectedNodeIds,
+    previewAlignment,
+  ]);
+
+  const guides = useMemo(() => {
+    if (
+      !document ||
+      (dragState?.mode !== "move" && dragState?.mode !== "marquee")
+    )
+      return [];
+    const positions =
+      dragState.mode === "move"
+        ? dragOffsets
+        : new Map(
+            [...selectedNodeIds].flatMap((id) => {
+              const node = document.nodes[id];
+              return node ? [[id, { x: node.x, y: node.y }] as const] : [];
+            }),
+          );
+    return alignmentGuides(document, positions, camera.zoom);
+  }, [document, dragState, dragOffsets, selectedNodeIds, camera.zoom]);
 
   const portSlots = useMemo(
     () =>
@@ -1087,6 +1131,43 @@ export function Canvas({
             />
           )}
 
+          {guides.length > 0 && (
+            <svg
+              aria-hidden="true"
+              data-testid="alignment-guides"
+              className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
+              style={{ zIndex: 45 }}
+            >
+              {guides.map((guide) => (
+                <line
+                  key={guide.axis}
+                  x1={
+                    guide.axis === "x"
+                      ? guide.position
+                      : guide.from - 12 / camera.zoom
+                  }
+                  y1={
+                    guide.axis === "y"
+                      ? guide.position
+                      : guide.from - 12 / camera.zoom
+                  }
+                  x2={
+                    guide.axis === "x"
+                      ? guide.position
+                      : guide.to + 12 / camera.zoom
+                  }
+                  y2={
+                    guide.axis === "y"
+                      ? guide.position
+                      : guide.to + 12 / camera.zoom
+                  }
+                  stroke="var(--accent)"
+                  strokeWidth={1 / camera.zoom}
+                  strokeDasharray={`${String(4 / camera.zoom)} ${String(3 / camera.zoom)}`}
+                />
+              ))}
+            </svg>
+          )}
           {/* Rubberband / Marquee Bounding Box */}
           {dragState?.mode === "marquee" && dragState.currentWorld && (
             <div
@@ -1215,6 +1296,7 @@ export function Canvas({
                   setContextMenu(null);
                 }}
                 onAlign={onAlign}
+                onPreviewAlign={setPreviewAlignment}
               />
             ) : null
           }
@@ -1266,6 +1348,7 @@ export function Canvas({
             onGroup={onGroup}
             onUngroup={onUngroup}
             onAlign={onAlign}
+            onPreviewAlign={setPreviewAlignment}
           />
         </div>
       )}

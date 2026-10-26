@@ -1,4 +1,4 @@
-import { Group, Ungroup } from "lucide-react";
+import { Group, Ungroup, AlignVerticalSpaceAround } from "lucide-react";
 import type { CanvasDocument, NodeId } from "@talweg/core";
 import { selectionRoots, type Alignment } from "../utils/organizeCanvas.js";
 import { useTranslation } from "../hooks/useTranslation.js";
@@ -9,12 +9,14 @@ export function OrganizeControls({
   onGroup,
   onUngroup,
   onAlign,
+  onPreviewAlign,
 }: {
   document: CanvasDocument;
   selectedIds: ReadonlySet<NodeId>;
   onGroup: () => void;
   onUngroup: () => void;
   onAlign: (alignment: Alignment) => void;
+  onPreviewAlign?: (alignment: Alignment | null) => void;
 }) {
   const { t } = useTranslation();
   const nodes = selectionRoots(document, selectedIds).filter(
@@ -38,6 +40,23 @@ export function OrganizeControls({
         <button type="button" onClick={onUngroup}>
           <Ungroup size={15} />
           {t("organize.ungroup")}
+        </button>
+      )}
+      {nodes.length >= 2 && (
+        <button
+          type="button"
+          title={t("organize.tidyHint")}
+          onPointerMove={() => onPreviewAlign?.("tidy")}
+          onPointerLeave={() => onPreviewAlign?.(null)}
+          onFocus={() => onPreviewAlign?.("tidy")}
+          onBlur={() => onPreviewAlign?.(null)}
+          onClick={() => {
+            onPreviewAlign?.(null);
+            onAlign("tidy");
+          }}
+        >
+          <AlignVerticalSpaceAround size={15} />
+          {t("organize.tidy")}
         </button>
       )}
       {nodes.length >= 2 && (

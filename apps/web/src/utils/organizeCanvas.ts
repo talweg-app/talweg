@@ -7,7 +7,10 @@ import {
   type Point2D,
 } from "@talweg/core";
 
+import { stabilizeConnections } from "./connectorGeometry.js";
+
 export type Alignment =
+  | "tidy"
   | "left"
   | "center"
   | "right"
@@ -211,7 +214,45 @@ export function alignSelection(
   const right = Math.max(...boxes.map((item) => item.box.x + item.box.width));
   const bottom = Math.max(...boxes.map((item) => item.box.y + item.box.height));
   const positions = new Map<NodeId, Point2D>();
-  if (alignment === "horizontal" || alignment === "vertical") {
+  if (alignment === "tidy") {
+    const centersX = boxes.map(({ box }) => box.x + box.width / 2);
+    const centersY = boxes.map(({ box }) => box.y + box.height / 2);
+    const averageWidth =
+      boxes.reduce((sum, { box }) => sum + box.width, 0) / boxes.length;
+    const averageHeight =
+      boxes.reduce((sum, { box }) => sum + box.height, 0) / boxes.length;
+    const horizontal =
+      (Math.max(...centersX) - Math.min(...centersX)) /
+        Math.max(1, averageWidth) >=
+      (Math.max(...centersY) - Math.min(...centersY)) /
+        Math.max(1, averageHeight);
+    const sorted = [...boxes].sort((a, b) =>
+      horizontal
+        ? a.box.x + a.box.width / 2 - b.box.x - b.box.width / 2
+        : a.box.y + a.box.height / 2 - b.box.y - b.box.height / 2,
+    );
+    const total = sorted.reduce(
+      (sum, { box }) => sum + (horizontal ? box.width : box.height),
+      0,
+    );
+    const span = horizontal ? right - left : bottom - top;
+    const gap = Math.max(24, (span - total) / (sorted.length - 1));
+    const length = total + gap * (sorted.length - 1);
+    let cursor = (horizontal ? left + right : top + bottom) / 2 - length / 2;
+    for (const { node, box } of sorted) {
+      positions.set(node.id, {
+        x:
+          node.x +
+          (horizontal ? cursor : (left + right - box.width) / 2) -
+          box.x,
+        y:
+          node.y +
+          (horizontal ? (top + bottom - box.height) / 2 : cursor) -
+          box.y,
+      });
+      cursor += (horizontal ? box.width : box.height) + gap;
+    }
+  } else if (alignment === "horizontal" || alignment === "vertical") {
     if (boxes.length < 3) return document;
     const horizontal = alignment === "horizontal";
     const sorted = [...boxes].sort((a, b) =>
@@ -246,6 +287,16 @@ export function alignSelection(
     }
   }
   const nodes = { ...document.nodes };
+  const stable = stabilizeConnections(world);
+  for (const node of Object.values(stable.nodes)) {
+    if (node.type === "arrow" && node.data !== world.nodes[node.id]?.data) {
+      nodes[node.id] = {
+        ...node,
+        x: document.nodes[node.id]?.x ?? node.x,
+        y: document.nodes[node.id]?.y ?? node.y,
+      };
+    }
+  }
   for (const [id, point] of positions) {
     const node = document.nodes[id];
     const displayed = world.nodes[id];
