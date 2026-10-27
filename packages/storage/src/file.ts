@@ -219,6 +219,8 @@ export function deserializeTalwegFile(
     nodes: Object.keys(docFromY.nodes).length > 0
       ? docFromY.nodes
       : (isRecord(snapshotObj.nodes) ? (snapshotObj.nodes as unknown as Record<NodeId, CanvasNode>) : {}),
+    ...(docFromY.pages !== undefined ? { pages: docFromY.pages } : {}),
+    ...(docFromY.activePageId !== undefined ? { activePageId: docFromY.activePageId } : {}),
     rootNodeIds: docFromY.rootNodeIds.length > 0
       ? docFromY.rootNodeIds
       : (Array.isArray(snapshotObj.rootNodeIds) ? (snapshotObj.rootNodeIds as NodeId[]) : []),

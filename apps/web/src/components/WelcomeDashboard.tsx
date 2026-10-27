@@ -3,7 +3,7 @@ import { JoinSession } from "./JoinSession.js";
 import type { LibraryIndex } from "../types/projectLibrary.js";
 import { ProjectStorageAdapter } from "../utils/projectStorage.js";
 import * as Y from "yjs";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock,
   FolderOpen,
@@ -41,6 +41,8 @@ import {
 } from "../utils/boardLibrary.js";
 import { ThemePicker } from "./ThemePicker.js";
 import { LanguagePicker } from "./LanguagePicker.js";
+
+const TemplateLibrary = lazy(() => import("./TemplateLibrary.js"));
 
 interface WelcomeDashboardProps {
   isOpen?: boolean;
@@ -86,6 +88,23 @@ export function WelcomeDashboard({
     () => new Intl.RelativeTimeFormat(language, { numeric: "auto" }),
     [language],
   );
+  const templateTrigger = useRef<HTMLButtonElement>(null);
+  const restoreTemplateFocus = useRef(false);
+  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
+  const closeTemplateLibrary = useCallback(() => {
+    setTemplateLibraryOpen(false);
+    restoreTemplateFocus.current = true;
+  }, []);
+  useEffect(() => {
+    if (!templateLibraryOpen && restoreTemplateFocus.current) {
+      restoreTemplateFocus.current = false;
+      templateTrigger.current?.focus({ preventScroll: true });
+    }
+  }, [templateLibraryOpen]);
+  useEffect(() => {
+    window.addEventListener("talweg:open-settings", closeTemplateLibrary);
+    return () => { window.removeEventListener("talweg:open-settings", closeTemplateLibrary); };
+  }, [closeTemplateLibrary]);
   const [recentBoards, setRecentBoards] = useState<StorageSnapshot["meta"][]>(
     [],
   );
@@ -317,12 +336,14 @@ export function WelcomeDashboard({
   return (
     <div
       ref={dialogRef}
+      inert={templateLibraryOpen ? true : undefined}
       tabIndex={-1}
       role={isStandalone ? "region" : "dialog"}
       aria-modal={isStandalone ? undefined : "true"}
       aria-labelledby="welcome-dashboard-title"
       className={`workspace-home ${isStandalone ? "" : "workspace-home-overlay"}`}
     >
+      {templateLibraryOpen && <Suspense fallback={null}><TemplateLibrary onClose={closeTemplateLibrary} onCreate={onCreateFromTemplate} /></Suspense>}
       <header className="workspace-header">
         <div className="workspace-brand">
           <img src="/favicon.svg" alt="" width="26" height="26" />
@@ -417,6 +438,7 @@ export function WelcomeDashboard({
             <h2 id="templates-title">{t("dashboard.templates")}</h2>
             <span>{t("dashboard.chooseStartingPoint")}</span>
           </div>
+          <button ref={templateTrigger} type="button" className="workspace-browse-templates" onClick={() => { setTemplateLibraryOpen(true); }}><Layers size={15} />{t("templateLibrary.browse")}<ArrowUpRight size={15} /></button>
           <div className="workspace-templates">
             {templates.map((template) => {
               const Icon = template.icon;

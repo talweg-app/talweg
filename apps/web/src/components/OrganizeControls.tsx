@@ -1,3 +1,4 @@
+import { ChoicePicker } from "./ChoicePicker.js";
 import { Group, Ungroup, AlignVerticalSpaceAround } from "lucide-react";
 import type { CanvasDocument, NodeId } from "@talweg/core";
 import { selectionRoots, type Alignment } from "../utils/organizeCanvas.js";
@@ -60,30 +61,9 @@ export function OrganizeControls({
         </button>
       )}
       {nodes.length >= 2 && (
-        <select
-          aria-label={t("organize.align")}
-          value=""
-          onChange={(event) => {
-            if (event.target.value) onAlign(event.target.value as Alignment);
-          }}
-        >
-          <option value="" disabled>
-            {t("organize.align")}
-          </option>
-          {(
-            ["left", "center", "right", "top", "middle", "bottom"] as const
-          ).map((alignment) => (
-            <option key={alignment} value={alignment}>
-              {t(`organize.${alignment}`)}
-            </option>
-          ))}
-          {nodes.length >= 3 && (
-            <>
-              <option value="horizontal">{t("organize.horizontal")}</option>
-              <option value="vertical">{t("organize.vertical")}</option>
-            </>
-          )}
-        </select>
+        <ChoicePicker className="organize-picker" label={t("organize.align")} value=""
+          options={[{ value: "", label: t("organize.align"), disabled: true }, ...(["left", "center", "right", "top", "middle", "bottom", ...(nodes.length >= 3 ? ["horizontal", "vertical"] : [])]).map(alignment => ({ value: alignment, label: t(`organize.${alignment}`) }))]}
+          onChange={value => { onAlign(value as Alignment); }} />
       )}
     </div>
   );

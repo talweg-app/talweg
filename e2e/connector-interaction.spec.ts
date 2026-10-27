@@ -69,9 +69,7 @@ async function openFixture(page: Page, cyclic = false) {
     buffer: Buffer.from(content),
   });
   await expect(page.getByTestId("canvas-node")).toHaveCount(2);
-  await page.evaluate(() => {
-    location.hash = "#cam=0,400,1";
-  });
+  await page.locator(".canvas-header").getByRole("button", { name: "100%", exact: true }).click();
   await expect
     .poll(() =>
       page
@@ -81,6 +79,7 @@ async function openFixture(page: Page, cyclic = false) {
         ),
     )
     .toBe(1);
+  await page.getByTestId("canvas").click({ position: { x: 80, y: 80 } });
   return {
     target: page.locator(
       `[data-testid="canvas-node"][data-node-id="${target.id}"]`,

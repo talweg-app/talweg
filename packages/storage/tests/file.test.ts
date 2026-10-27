@@ -5,6 +5,7 @@ import type {
   DocumentId,
   NodeId,
   RectangleNode,
+  PageId,
 } from "@talweg/core";
 import {
   base64ToUint8Array,
@@ -76,6 +77,26 @@ describe("base64 utilities", () => {
 });
 
 describe("serializeTalwegFile and deserializeTalwegFile", () => {
+  it("preserves page metadata and node membership when reopening a native file", () => {
+    const doc = makeDocument();
+    const first = "page-lesson" as PageId, second = "page-practice" as PageId;
+    doc.pages = {
+      [first]: { id: first, name: "Lesson", order: 0, createdAt: 1000, updatedAt: 1500 },
+      [second]: { id: second, name: "Practice", order: 1, createdAt: 1000, updatedAt: 1500 },
+    };
+    doc.activePageId = second;
+    const node = Object.values(doc.nodes)[0];
+    if (!node) throw new Error("Missing fixture node");
+    node.pageId = first;
+    const scene = documentToYDoc(doc);
+    const recovered = deserializeTalwegFile(serializeTalwegFile(doc, scene));
+    try {
+      expect(recovered.doc.pages).toEqual(doc.pages);
+      expect(recovered.doc.activePageId).toBe(second);
+      expect(recovered.doc.nodes[node.id]?.pageId).toBe(first);
+    } finally { scene.destroy(); recovered.ydoc.destroy(); }
+  });
+
   it("serializes and deserializes a document with Y.Doc and assets", () => {
     const doc = makeDocument();
     const ydoc = documentToYDoc(doc);

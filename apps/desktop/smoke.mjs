@@ -36,15 +36,19 @@ async function launch() {
     if (/ERROR|Error|failed/i.test(text)) process.stderr.write(text);
   });
   const page = await application.firstWindow();
+  await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.show(); });
   page.on("pageerror", (error) => process.stderr.write(error.stack + "\n"));
   return page;
 }
 async function close() {
+  const child = application.process();
+  const exited = new Promise(resolveExit => { if (child.exitCode !== null) resolveExit(); else child.once("exit", resolveExit); });
   const closed = application.waitForEvent("close", { timeout: 15000 });
   await application.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.close();
   });
   await closed;
+  await exited;
   application = undefined;
 }
 try {
@@ -54,12 +58,22 @@ try {
   });
   await setup.waitFor({ timeout: 15000 });
   await setup.getByRole("textbox", { name: "Your name", exact: true }).fill("Native User");
-  await setup.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
+  await setup.getByRole("combobox", { name: "Appearance", exact: true }).click();
+  await page.getByRole("listbox", { name: "Appearance", exact: true }).getByRole("option", { name: "Light", exact: true }).click();
   await page.screenshot({ path: join(directory, "welcome-light.png"), animations: "disabled" });
   await setup.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("dark");
   await page.screenshot({ path: join(directory, "welcome-dark.png"), animations: "disabled" });
   assert.equal(await setup.evaluate(element => element.scrollHeight <= element.clientHeight + 1), true);
   await setup.getByRole("button", { name: "Start using Talweg", exact: true }).click();
+  await page.getByRole("button", { name: "Browse all 12 templates", exact: true }).click();
+  const templates = page.getByRole("dialog", { name: "Template library", exact: true });
+  await templates.waitFor();
+  assert.equal(await templates.locator(".template-library-card").count(), 12);
+  await templates.getByRole("searchbox").fill("Math lesson");
+  await templates.getByRole("button", { name: /Math lesson/ }).click();
+  await page.getByRole("tab", { name: "Solutions", exact: true }).waitFor();
+  await page.locator(".canvas-note-preview .katex").first().waitFor();
+  await page.getByRole("button", { name: "Talweg", exact: true }).click();
   await page.getByRole("button", { name: /^Blank Canvas/ }).click();
   await page.locator(".canvas-document-title").fill("Native QA");
   await page.getByTestId("canvas").click({ position: { x: 200, y: 180 } });
@@ -141,7 +155,7 @@ try {
   assert.equal((await readdir(nextProjects)).filter((file) => file.endsWith(".talweg")).length, 0);
   process.stdout.write(JSON.stringify({
     result: "passed", directory,
-    checks: ["secure local protocol", "sandboxed renderer without Node integration", "first-run setup in both themes", "file-backed preferences", "canvas undo and redo", "project save on close", "reopen with saved shape", "native version history and independent restoration", "native Settings menu", "interface scale survives restart", "Ctrl plus and minus resize UI without Chromium zoom", "folder chooser IPC", "folder change after restart without moving existing files"],
+    checks: ["secure local protocol", "sandboxed renderer without Node integration", "first-run setup in both themes", "template gallery and multi-page math preview", "file-backed preferences", "canvas undo and redo", "project save on close", "reopen with saved shape", "native version history and independent restoration", "native Settings menu", "interface scale survives restart", "Ctrl plus and minus resize UI without Chromium zoom", "folder chooser IPC", "folder change after restart without moving existing files"],
   }) + "\n");
 } catch (error) {
   if (application) {

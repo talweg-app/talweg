@@ -1,3 +1,4 @@
+import { createStarterTemplate } from "./templateCatalog.js";
 import { describe, expect, it } from "vitest";
 import type { CanvasDocument, NodeId } from "@talweg/core";
 import {
@@ -208,6 +209,14 @@ describe("organizing canvas content", () => {
     expect(c.x + c.width).toBe(660);
     expect(b.x - a.x - a.width).toBe(c.x - b.x - b.width);
   });
+  it("preserves the outer edges when distributing an already close row", () => {
+    const before = fixture();
+    Object.values(before.nodes).forEach((node, index) => { node.x = [0, 90, 220][index] ?? 0; });
+    const next = alignSelection(before, ids, "horizontal");
+    expect(next.nodes["a" as NodeId]?.x).toBe(0);
+    expect(next.nodes["b" as NodeId]?.x).toBe(90);
+    expect(next.nodes["c" as NodeId]?.x).toBe(220);
+  });
   it("aligns children in world coordinates while preserving their parent", () => {
     const grouped = groupSelection(fixture(), ids, groupId, "Group");
     const aligned = alignSelection(grouped, ids, "right");
@@ -255,6 +264,23 @@ describe("organizing canvas content", () => {
     for (const id of Object.keys(grouped.nodes))
       expect(deleted.nodes[id as NodeId]).toBeUndefined();
     expect(Object.keys(deleted.nodes).length).toBeGreaterThan(0);
+  });
+  it("keeps a roadmap in its original columns and rows instead of flattening the board", () => {
+    const before = createStarterTemplate("roadmap");
+    const selected = new Set(Object.values(before.nodes).filter(node => node.pageId === before.activePageId).map(node => node.id));
+    const next = alignSelection(before, selected, "tidy");
+    const cards = Object.values(next.nodes).filter(node => node.type === "card");
+    expect(new Set(cards.map(node => node.x)).size).toBe(3);
+    expect(new Set(cards.map(node => node.y)).size).toBe(3);
+    expect(cards.map(node => node.id)).toEqual(Object.values(before.nodes).filter(node => node.type === "card").map(node => node.id));
+    for (const a of cards) for (const b of cards) if (a.id !== b.id && a.y === b.y) expect(Math.abs(a.x - b.x)).toBeGreaterThanOrEqual(a.width + 24);
+  });
+  it("distributing overlapping objects creates usable gaps instead of negative spacing", () => {
+    const before = fixture();
+    Object.values(before.nodes).forEach((node, index) => { node.x = index * 10; });
+    const next = alignSelection(before, ids, "horizontal");
+    const nodes = Object.values(next.nodes).sort((a, b) => a.x - b.x);
+    for (let i = 1; i < nodes.length; i++) expect((nodes[i]?.x ?? 0) - (nodes[i - 1]?.x ?? 0) - (nodes[i - 1]?.width ?? 0)).toBe(24);
   });
   it("rejects grouping across pages and handles malformed cyclic parent references", () => {
     const document = fixture();

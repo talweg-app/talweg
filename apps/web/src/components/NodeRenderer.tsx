@@ -1,3 +1,4 @@
+import { notePreview } from "../utils/notePreview.js";
 import { FreehandRenderer } from "./FreehandRenderer.js";
 import { nodeAppearance } from "../utils/sceneAppearance.js";
 import {
@@ -27,6 +28,7 @@ import { useTranslation } from "../hooks/useTranslation.js";
 import { StructuredNodeContent } from "./StructuredNodeContent.js";
 import { RichText } from "./RichText.js";
 import { AssetImage } from "./AssetImage.js";
+const NoteMarkdown = lazy(() => import("./NoteMarkdown.js"));
 const NoteEditor = lazy(async () => {
   const module = await import("./NoteEditor.js");
   return { default: module.NoteEditor };
@@ -125,6 +127,7 @@ export function NodeRenderer({
     borderRadius:
       typeof appearance.cornerRadius === "number" ? appearance.cornerRadius : 6,
   };
+  const previewSource = node.type === "markdown" ? notePreview(node.note ?? "", node.height < 160) : "";
   const rich = (
     field: string,
     text: string,
@@ -204,7 +207,7 @@ export function NodeRenderer({
       }}
       onDoubleClick={(event) => {
         if (event.target instanceof Element && !event.target.closest("button"))
-          setIsEditing(true);
+          if (node.type === "markdown") setNoteOpen(true); else setIsEditing(true);
       }}
     >
       {isSelected &&
@@ -355,11 +358,12 @@ export function NodeRenderer({
       )}
       {node.type === "markdown" && (
         <div className="markdown-node" style={{ ...surface, ...typography }}>
-          <strong>{node.data.title || t("note.untitled")}</strong>
-          <span>
-            {(node.note ?? "").replace(/[#*`]/g, "").slice(0, 90) ||
-              t("note.nodeHint")}
-          </span>
+          <strong className="markdown-node-title">{node.data.title || t("note.untitled")}</strong>
+          <div className="canvas-note-preview" aria-hidden={noteOpen || undefined} inert={noteOpen || undefined} style={{ pointerEvents: isPanActive ? "none" : undefined }} onWheelCapture={event => { if (!event.ctrlKey && !event.metaKey && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) event.stopPropagation(); }}>
+            <Suspense fallback={<span className="note-preview-loading" aria-hidden="true" />}>
+              {previewSource ? <NoteMarkdown source={previewSource} adapter={adapter} /> : <span>{t("note.nodeHint")}</span>}
+            </Suspense>
+          </div>
         </div>
       )}
       {node.type === "image" && (

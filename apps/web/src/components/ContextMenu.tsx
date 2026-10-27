@@ -137,11 +137,13 @@ export function ContextMenu({
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
+      if (e.target instanceof Element && e.target.closest(".choice-menu")) return;
       if (!(e.target instanceof Node) || !menuRef.current?.contains(e.target))
         onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (e.target instanceof HTMLSelectElement && e.target.getAttribute("aria-expanded") === "true") return;
         e.preventDefault();
         e.stopPropagation();
         onClose();
@@ -168,6 +170,7 @@ export function ContextMenu({
       }
     };
     const handleWheel = (e: WheelEvent) => {
+      if (e.target instanceof Element && e.target.closest(".choice-menu")) return;
       if (!(e.target instanceof Node) || !menuRef.current?.contains(e.target))
         onClose();
     };

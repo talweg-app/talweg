@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { applyDocumentToYDoc, createSceneDoc, deserializeTalwegFile, serializeTalwegFile } from "@talweg/storage";
 import { createBlankCanvas, createMicroservicesTemplate } from "../src/utils/starterTemplates.js";
 import { ProjectLibrary } from "./projectFiles.js";
+import { createStarterTemplate } from "../src/utils/templateCatalog.js";
 import { DEFAULT_HISTORY_POLICY } from "../src/types/projectHistory.js";
 import { historyApi } from "./historyApi.js";
 
@@ -93,6 +94,24 @@ describe("local project history", () => {
       expect(new Uint8Array(recovered.assets.image?.data ?? new ArrayBuffer(0))).toEqual(new Uint8Array([4, 8, 12]));
     } finally { recovered.ydoc.destroy(); }
     expect(await readFile(join(store.directory, `${first.doc.id}.talweg`), "utf8")).toBe(original);
+  });
+  it("restores named pages and their self-links from a multi-page checkpoint", async () => {
+    const store = await library();
+    const doc = createStarterTemplate("lesson", "en");
+    const scene = createSceneDoc(); applyDocumentToYDoc(doc, scene);
+    try { await store.save(doc.id, serializeTalwegFile(doc, scene)); }
+    finally { scene.destroy(); }
+    const version = await store.checkpoint(doc.id, "Lesson before editing");
+    const copy = await store.restore(doc.id, version.id);
+    const restored = deserializeTalwegFile(await store.read(copy.id) ?? "");
+    try {
+      expect(restored.doc.pages).toEqual(doc.pages);
+      expect(restored.doc.activePageId).toBe(doc.activePageId);
+      expect(Object.values(restored.doc.nodes).filter(node => node.pageId === "page-practice")).toHaveLength(6);
+      const formula = Object.values(restored.doc.nodes).find(node => node.note?.includes("Go to practice"));
+      expect(formula?.note).toContain(`/board/${copy.id}/page/page-practice?node=`);
+      expect(formula?.note).not.toContain(`/board/${doc.id}/`);
+    } finally { restored.ydoc.destroy(); }
   });
   it("keeps project saves working when history storage fails and reports it", async () => {
     const store = await library(); const first = fixture();

@@ -215,6 +215,39 @@ export function alignSelection(
   const bottom = Math.max(...boxes.map((item) => item.box.y + item.box.height));
   const positions = new Map<NodeId, Point2D>();
   if (alignment === "tidy") {
+    const rows: (typeof boxes)[] = [];
+    for (const item of [...boxes].sort((a, b) => a.box.y + a.box.height / 2 - b.box.y - b.box.height / 2)) {
+      const row = rows.find(cells => {
+        const center = cells.reduce((sum, cell) => sum + cell.box.y + cell.box.height / 2, 0) / cells.length;
+        return Math.abs(item.box.y + item.box.height / 2 - center) <= Math.min(item.box.height, ...cells.map(cell => cell.box.height)) * .45;
+      });
+      if (row) row.push(item); else rows.push([item]);
+    }
+    if (rows.filter(row => row.length >= 2).length >= 2) {
+      for (const row of rows) row.sort((a, b) => a.box.x - b.box.x);
+      const columns = Math.max(...rows.map(row => row.length));
+      const fullRows = rows.filter(row => row.length === columns);
+      const widths = Array.from({ length: columns }, (_, index) => Math.max(...fullRows.map(row => row[index]?.box.width ?? 0)));
+      const centers = Array.from({ length: columns }, (_, index) => fullRows.reduce((sum, row) => { const box = row[index]?.box; return sum + (box ? box.x + box.width / 2 : 0); }, 0) / fullRows.length);
+      const medianGap = (gaps: number[]) => Math.max(24, gaps.filter(gap => gap >= 0).sort((a, b) => a - b)[Math.floor(gaps.filter(gap => gap >= 0).length / 2)] ?? 24);
+      const gapX = medianGap(rows.flatMap(row => row.slice(1).map((cell, index) => cell.box.x - (row[index]?.box.x ?? 0) - (row[index]?.box.width ?? 0))));
+      const heights = rows.map(row => Math.max(...row.map(cell => cell.box.height)));
+      const gapY = medianGap(rows.slice(1).map((row, index) => Math.min(...row.map(cell => cell.box.y)) - Math.max(...(rows[index] ?? []).map(cell => cell.box.y + cell.box.height))));
+      const width = Math.max(widths.reduce((sum, value) => sum + value, 0) + gapX * (columns - 1), ...rows.filter(row => row.length === 1).map(row => row[0]?.box.width ?? 0));
+      const height = heights.reduce((sum, value) => sum + value, 0) + gapY * (rows.length - 1);
+      const startX = (left + right - width) / 2;
+      let y = (top + bottom - height) / 2;
+      rows.forEach((row, rowIndex) => {
+        const used = new Set<number>();
+        row.forEach(({ node, box }, index) => {
+          const column = row.length === columns ? index : centers.map((center, column) => ({ column, distance: used.has(column) ? Infinity : Math.abs(center - box.x - box.width / 2) })).sort((a, b) => a.distance - b.distance)[0]?.column ?? 0;
+          used.add(column);
+          const x = startX + (row.length === 1 && box.width >= width * .65 ? 0 : widths.slice(0, column).reduce((sum, value) => sum + value, 0) + column * gapX);
+          positions.set(node.id, { x: node.x + x - box.x, y: node.y + y + ((heights[rowIndex] ?? box.height) - box.height) / 2 - box.y });
+        });
+        y += (heights[rowIndex] ?? 0) + gapY;
+      });
+    } else {
     const centersX = boxes.map(({ box }) => box.x + box.width / 2);
     const centersY = boxes.map(({ box }) => box.y + box.height / 2);
     const averageWidth =
@@ -252,6 +285,7 @@ export function alignSelection(
       });
       cursor += (horizontal ? box.width : box.height) + gap;
     }
+    }
   } else if (alignment === "horizontal" || alignment === "vertical") {
     if (boxes.length < 3) return document;
     const horizontal = alignment === "horizontal";
@@ -262,10 +296,10 @@ export function alignSelection(
       (sum, item) => sum + (horizontal ? item.box.width : item.box.height),
       0,
     );
-    const gap =
-      ((horizontal ? right - left : bottom - top) - total) /
-      (sorted.length - 1);
-    let cursor = horizontal ? left : top;
+    const availableGap = ((horizontal ? right - left : bottom - top) - total) / (sorted.length - 1);
+    const gap = availableGap < 0 ? 24 : availableGap;
+    const length = total + gap * (sorted.length - 1);
+    let cursor = (horizontal ? left + right : top + bottom) / 2 - length / 2;
     for (const { node, box } of sorted) {
       positions.set(node.id, {
         x: horizontal ? node.x + cursor - box.x : node.x,

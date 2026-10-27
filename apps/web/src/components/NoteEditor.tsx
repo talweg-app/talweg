@@ -1,16 +1,10 @@
-import { useNodeLinks, sessionNodeHref } from "./NodeLinks.js";
-import { navigate } from "../routes/router.js";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Markdown, { defaultUrlTransform } from "react-markdown";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+import NoteMarkdown from "./NoteMarkdown.js";
 import type { CanvasNode } from "@talweg/core";
 import type { StorageAdapter } from "@talweg/storage";
 import { Download, FileUp, ImagePlus, Sigma, X } from "lucide-react";
 import { useTranslation } from "../hooks/useTranslation.js";
-import { AssetImage } from "./AssetImage.js";
 import { downloadText, exportNoteMarkdown } from "../utils/noteFiles.js";
 
 interface NoteEditorProps {
@@ -27,8 +21,7 @@ export function NoteEditor({
   onClose,
 }: NoteEditorProps) {
   const { t } = useTranslation();
-  const canvasDocument = useNodeLinks();
-  const [tab, setTab] = useState<"edit" | "preview">("edit");
+  const [tab, setTab] = useState<"edit" | "preview">(node.note?.trim() ? "preview" : "edit");
   const [error, setError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -47,7 +40,7 @@ export function NoteEditor({
 
   useEffect(() => {
     const previous = document.activeElement;
-    textareaRef.current?.focus();
+    (textareaRef.current ?? panelRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'))?.focus();
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -56,7 +49,7 @@ export function NoteEditor({
       if (event.key === "Tab") {
         const controls = Array.from(
           panelRef.current?.querySelectorAll<HTMLElement>(
-            "button:not(:disabled), textarea, input:not([hidden])",
+            'button:not(:disabled), textarea, input:not([hidden]), a[href]',
           ) ?? [],
         );
         const first = controls[0];
@@ -139,7 +132,7 @@ export function NoteEditor({
       >
         <header>
           <div>
-            <span className="note-eyebrow">MARKDOWN</span>
+            <span className="note-eyebrow">{t("note.title")}</span>
             <h2>{title || t("note.untitled")}</h2>
           </div>
           <button
@@ -249,53 +242,7 @@ export function NoteEditor({
           />
         ) : (
           <div className="markdown-preview" role="tabpanel">
-            <Markdown
-              skipHtml
-              remarkPlugins={[remarkMath]}
-              rehypePlugins={[
-                [rehypeKatex, { trust: false, maxSize: 20, maxExpand: 1000 }],
-              ]}
-              urlTransform={(url) =>
-                url.startsWith("asset:") ||
-                /^data:image\/(png|jpeg|webp|gif);base64,/i.test(url)
-                  ? url
-                  : defaultUrlTransform(url)
-              }
-              components={{
-                img: ({ src, alt }) =>
-                  typeof src === "string" && src.startsWith("asset:") ? (
-                    <AssetImage
-                      assetId={src.slice(6)}
-                      alt={alt ?? ""}
-                      adapter={adapter}
-                    />
-                  ) : typeof src === "string" &&
-                    /^data:image\/(png|jpeg|webp|gif);base64,/i.test(src) ? (
-                    <img src={src} alt={alt ?? ""} />
-                  ) : (
-                    <span className="asset-placeholder">
-                      {t("note.localImageOnly")}
-                    </span>
-                  ),
-                a: ({ href, children }) => (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => {
-                      if (href?.startsWith("/board/")) {
-                        event.preventDefault();
-                        navigate(sessionNodeHref(href, canvasDocument));
-                      }
-                    }}
-                  >
-                    {children}
-                  </a>
-                ),
-              }}
-            >
-              {markdown || t("note.empty")}
-            </Markdown>
+            <NoteMarkdown source={markdown} adapter={adapter} />
           </div>
         )}
         <footer>

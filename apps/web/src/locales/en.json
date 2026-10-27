@@ -227,7 +227,7 @@
     "saved": "Saved on this device",
     "characters": "characters",
     "empty": "Nothing written yet.",
-    "nodeHint": "Open to write in Markdown",
+    "nodeHint": "Open to add a note",
     "imageError": "Choose an image smaller than 20 MB.",
     "fileError": "Choose a Markdown file smaller than 10 MB.",
     "localImageOnly": "Add this image from your device to keep it in the document.",
@@ -276,7 +276,7 @@
   },
   "organize": {
     "tidy": "Tidy selection",
-    "tidyHint": "Preview an even row or column; click to apply",
+    "tidyHint": "Preview tidy spacing while keeping rows and columns; click to apply",
     "selected": "selected",
     "group": "Group",
     "groupHint": "Group selection (Ctrl/Cmd+G)",
@@ -482,5 +482,23 @@
     "localOnly": "History settings could not be loaded. Connect a local projects folder, or try the default settings.",
     "useDefaults": "Use default history settings",
     "downloadError": "This version could not be downloaded. Its files have been kept."
+  },
+  "templateLibrary": {
+    "title": "Template library",
+    "hint": "Choose a useful starting point. Every element is yours to change.",
+    "browse": "Browse all 12 templates",
+    "search": "Search templates…",
+    "categories": "Template categories",
+    "all": "All templates",
+    "planning": "Planning",
+    "thinking": "Thinking",
+    "workshops": "Workshops",
+    "learning": "Learning",
+    "engineering": "Engineering",
+    "results": "templates",
+    "pages": "pages",
+    "empty": "No templates match your search.",
+    "clear": "Clear filters",
+    "localHint": "Templates open as independent boards. They enter your recent projects when you make your first edit."
   }
 }

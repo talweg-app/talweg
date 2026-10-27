@@ -123,6 +123,8 @@ test("Markdown notes preview safely and retain content on reload", async ({
   await expect(panel.getByText("important", { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Open note", exact: true }).click();
+  await expect(panel.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true");
+  await panel.getByRole("tab", { name: "Edit description", exact: true }).click();
   await expect(
     panel.getByLabel("Markdown text", { exact: true }),
   ).toContainText("# Release");
@@ -286,6 +288,7 @@ test("Markdown images survive reload and export with their note", async ({
     .getByRole("button", { name: "Import Markdown", exact: true })
     .click();
   await (await open).setFiles(path);
+  await panel.getByRole("tab", { name: "Edit description", exact: true }).click();
   await expect(panel.getByLabel("Markdown text", { exact: true })).toHaveValue(
     /data:image\/png;base64,/,
   );
@@ -355,6 +358,8 @@ for (const appearance of ["light", "dark"]) {
     await page.screenshot({ path: test.info().outputPath(`math-${appearance}.png`) });
     await page.reload();
     await page.getByRole("button", { name: "Open note", exact: true }).click();
+    await expect(panel.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true");
+    await panel.getByRole("tab", { name: "Edit description", exact: true }).click();
     await expect(panel.getByLabel("Markdown text", { exact: true })).toHaveValue(source);
     await panel.getByRole("tab", { name: "Preview", exact: true }).click();
     await expect(panel.locator(".katex")).toHaveCount(2);
