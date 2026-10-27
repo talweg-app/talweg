@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { historyApi } from "../../web/server/historyApi.js";
 import { ProjectLibrary } from "../../web/server/projectFiles.js";
 import { parseInvitation } from "../../web/src/utils/invitation.js";
 import type { DesktopInfo } from "../../web/src/types/desktop.js";
@@ -213,6 +214,7 @@ async function start() {
     try {
       const url = new URL(request.url);
       if (!trusted(url.href)) return new Response(null, { status: 403 });
+      if (url.pathname.startsWith("/api/history")) return await historyApi(library, request);
       if (url.pathname === "/api/peer-config")
         return json({ localRelay: false });
       if (url.pathname === "/api/projects" && request.method === "GET")
@@ -236,7 +238,9 @@ async function start() {
           const value = await request.text();
           if (value.length > 100 * 1024 * 1024)
             return json({ error: "Project exceeds 100 MB" }, 413);
-          return json(await library.save(id, value));
+          const result = json(await library.save(id, value));
+          result.headers.set("X-Talweg-History-Warning", library.history.failures.has(id) ? "1" : "0");
+          return result;
         }
         if (request.method === "DELETE") {
           await library.delete(id);

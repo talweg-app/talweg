@@ -55,9 +55,10 @@ try {
   await setup.waitFor({ timeout: 15000 });
   await setup.getByRole("textbox", { name: "Your name", exact: true }).fill("Native User");
   await setup.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
-  await page.screenshot({ path: join(directory, "welcome-light.png") });
+  await page.screenshot({ path: join(directory, "welcome-light.png"), animations: "disabled" });
   await setup.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("dark");
-  await page.screenshot({ path: join(directory, "welcome-dark.png") });
+  await page.screenshot({ path: join(directory, "welcome-dark.png"), animations: "disabled" });
+  assert.equal(await setup.evaluate(element => element.scrollHeight <= element.clientHeight + 1), true);
   await setup.getByRole("button", { name: "Start using Talweg", exact: true }).click();
   await page.getByRole("button", { name: /^Blank Canvas/ }).click();
   await page.locator(".canvas-document-title").fill("Native QA");
@@ -77,16 +78,43 @@ try {
   await page.getByTestId("canvas-node").waitFor({ state: "detached" });
   await page.keyboard.press("Control+Shift+z");
   await page.getByTestId("canvas-node").waitFor();
+  await page.keyboard.press("Control+Comma");
+  const scaleSettings = page.getByRole("dialog", { name: "Settings", exact: true });
+  await scaleSettings.getByRole("slider", { name: "Interface scale", exact: true }).fill("125");
+  await scaleSettings.getByRole("button", { name: "Done", exact: true }).click();
+  assert.equal((await page.locator(".canvas-header").boundingBox()).height, 70);
+  await page.keyboard.press("Control+Equal");
+  assert.equal(await page.locator(".canvas-header").evaluate(element => getComputedStyle(element).zoom), "1.3");
+  assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomFactor()), 1);
+  await page.keyboard.press("Control+Minus");
+  assert.equal(await page.locator(".canvas-header").evaluate(element => getComputedStyle(element).zoom), "1.25");
+
+  const originalId = new URL(page.url()).pathname.split("/")[2];
+  await page.getByRole("button", { name: "Canvas settings", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Version history", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "Version history", exact: true });
+  await history.getByRole("textbox", { name: "Checkpoint name (optional)", exact: true }).fill("Native checkpoint");
+  await history.getByRole("button", { name: "Save checkpoint", exact: true }).click();
+  await history.getByRole("button", { name: /^Native checkpoint/ }).waitFor();
+  await history.getByRole("img", { name: "Version preview", exact: true }).waitFor();
+  await history.getByRole("button", { name: "Restore as a new board", exact: true }).click();
+  await page.waitForURL(url => url.pathname.split("/")[2] !== originalId);
+  await page.locator(".canvas-document-title").waitFor();
+  await page.getByTestId("canvas-node").waitFor();
+  assert.notEqual(new URL(page.url()).pathname.split("/")[2], originalId);
+  assert.equal(await page.locator(".canvas-document-title").inputValue(), "Native QA (restored)");
   await close();
   const preferences = JSON.parse(await readFile(join(directory, "profile", "preferences.json"), "utf8"));
   assert.equal(preferences.clientState.talweg_welcome_complete, "1");
   assert.equal(preferences.clientState.talweg_display_name, "Native User");
   assert.equal(preferences.clientState.talweg_theme, "dark");
+  assert.equal(JSON.parse(preferences.clientState.talweg_preferences).interfaceScale, 1.25);
 
   page = await launch();
-  await page.getByRole("button", { name: /^Native QA/ }).click();
+  await page.getByRole("button", { name: /^Native QA 1 element/ }).click();
   await page.getByTestId("canvas-node").waitFor();
   assert.equal(await page.getByTestId("canvas-node").count(), 1);
+  assert.equal((await page.locator(".canvas-header").boundingBox()).height, 70);
   await application.evaluate(({ Menu }) => {
     Menu.getApplicationMenu().items[0].submenu.items[0].click();
   });
@@ -108,12 +136,12 @@ try {
   page = await launch();
   await page.getByRole("button", { name: /^Blank Canvas/ }).waitFor();
   assert.equal(await page.evaluate(() => window.talwegDesktopInfo.projectsDirectory), nextProjects);
-  assert.equal((await readdir(projects)).filter((file) => file.endsWith(".talweg")).length, 1);
+  assert.equal((await readdir(projects)).filter((file) => file.endsWith(".talweg")).length, 2);
   await close();
   assert.equal((await readdir(nextProjects)).filter((file) => file.endsWith(".talweg")).length, 0);
   process.stdout.write(JSON.stringify({
     result: "passed", directory,
-    checks: ["secure local protocol", "sandboxed renderer without Node integration", "first-run setup in both themes", "file-backed preferences", "canvas undo and redo", "project save on close", "reopen with saved shape", "native Settings menu", "folder chooser IPC", "folder change after restart without moving existing files"],
+    checks: ["secure local protocol", "sandboxed renderer without Node integration", "first-run setup in both themes", "file-backed preferences", "canvas undo and redo", "project save on close", "reopen with saved shape", "native version history and independent restoration", "native Settings menu", "interface scale survives restart", "Ctrl plus and minus resize UI without Chromium zoom", "folder chooser IPC", "folder change after restart without moving existing files"],
   }) + "\n");
 } catch (error) {
   if (application) {

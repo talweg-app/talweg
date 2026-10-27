@@ -730,7 +730,7 @@ export function useCanvas(
     const flush = (event: Event) => {
       const scene = ydocRef.current,
         adapter = adapterRef.current;
-      if (!scene || !adapter) return;
+      if (!scene || !adapter || scene.getMap(SCENE_META_KEY).get("id") !== documentId) return;
       const doc = yDocToDocument(scene);
       const pending = adapter
         .saveSnapshot({

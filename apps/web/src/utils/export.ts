@@ -15,12 +15,12 @@ import {
 import { firstPageId, pageNodes } from "./pageNodes.js";
 import { drawNode } from "./drawNode.js";
 
-export async function exportToPng(
+export async function renderCanvasImage(
   document: CanvasDocument,
-  filename = "talweg-canvas.png",
   adapter?: StorageAdapter | null,
   theme: Theme = "dark",
-): Promise<void> {
+  options: { maxDimension?: number; assetUrls?: ReadonlyMap<string, string> } = {},
+): Promise<HTMLCanvasElement | null> {
   document = worldDocument(document);
   const visibleNodes = Object.values(
     pageNodes(document, document.activePageId ?? firstPageId(document)),
@@ -32,7 +32,7 @@ export async function exportToPng(
         ? { ...node, ...groupBounds(document, node) }
         : node,
     );
-  if (nodes.length === 0) return;
+  if (nodes.length === 0) return null;
   await window.document.fonts.ready;
 
   const images = new Map<string, HTMLImageElement>();
@@ -40,7 +40,7 @@ export async function exportToPng(
     nodes
       .filter((node) => node.type === "image")
       .map(async (node) => {
-        const url = await resolveAssetUrl(node.data.assetId, adapter);
+        const url = options.assetUrls ? options.assetUrls.get(node.data.assetId) : await resolveAssetUrl(node.data.assetId, adapter);
         if (!url) throw new Error(`Missing image asset: ${node.data.assetId}`);
         const image = new Image();
         image.src = url;
@@ -52,14 +52,14 @@ export async function exportToPng(
   const padding = 60;
   const canvasWidth = bounds.width + padding * 2;
   const canvasHeight = bounds.height + padding * 2;
-  const pixelRatio = 2;
+  const pixelRatio = options.maxDimension ? Math.min(2, options.maxDimension / Math.max(canvasWidth, canvasHeight)) : 2;
 
   const canvas = window.document.createElement("canvas");
-  canvas.width = canvasWidth * pixelRatio;
-  canvas.height = canvasHeight * pixelRatio;
+  canvas.width = Math.max(1, Math.ceil(canvasWidth * pixelRatio));
+  canvas.height = Math.max(1, Math.ceil(canvasHeight * pixelRatio));
 
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return null;
 
   ctx.scale(pixelRatio, pixelRatio);
 
@@ -72,7 +72,7 @@ export async function exportToPng(
 
   // Grid dots
   ctx.fillStyle = theme === "light" ? "#dfe1db" : "#202223";
-  const gridSize = 24;
+  const gridSize = options.maxDimension ? Math.max(24, 24 / pixelRatio) : 24;
   const startX = Math.floor(originX / gridSize) * gridSize;
   const startY = Math.floor(originY / gridSize) * gridSize;
   for (let x = startX; x < originX + canvasWidth; x += gridSize) {
@@ -191,6 +191,17 @@ export async function exportToPng(
   }
   ctx.restore();
 
+  return canvas;
+}
+
+export async function exportToPng(
+  document: CanvasDocument,
+  filename = "talweg-canvas.png",
+  adapter?: StorageAdapter | null,
+  theme: Theme = "dark",
+): Promise<void> {
+  const canvas = await renderCanvasImage(document, adapter, theme);
+  if (!canvas) return;
   canvas.toBlob((blob) => {
     if (!blob) return;
     const url = URL.createObjectURL(blob);

@@ -5,4 +5,4 @@ export interface LibraryIndex {
   issues: string[];
   deletedIds: string[];
 }
-export type LibraryState = "browser" | "library" | "library-saving" | "library-error";
+export type LibraryState = "browser" | "library" | "library-saving" | "library-error" | "history-error";

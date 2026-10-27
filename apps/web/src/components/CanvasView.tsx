@@ -1,3 +1,4 @@
+import { openVersionHistory } from "../utils/projectHistory.js";
 import { usePreferences } from "../hooks/usePreferences.js";
 import { updatePreferences } from "../utils/preferences.js";
 import {
@@ -117,6 +118,7 @@ export default function CanvasView({
           <p>{t("library.preserved")}</p>
           <div className="app-recovery-actions">
             <button onClick={onOpenDashboard}>{t("library.back")}</button>
+            <button type="button" onClick={() => { openVersionHistory(documentId); }}>{t("history.title")}</button>
             <button
               onClick={() => {
                 window.location.reload();

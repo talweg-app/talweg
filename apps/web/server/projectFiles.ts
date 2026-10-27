@@ -1,3 +1,8 @@
+import { ProjectHistory } from "./projectHistory.js";
+import { copyBoard } from "../src/utils/copyBoard.js";
+import { createSceneDoc, applyDocumentToYDoc } from "@talweg/storage";
+import type { DocumentId } from "@talweg/core";
+import type { ProjectVersion } from "../src/types/projectHistory.js";
 import type { LibraryIndex } from "../src/types/projectLibrary.js";
 import { mkdir, readdir, readFile, rename, writeFile, unlink, access } from "node:fs/promises";
 import { join } from "node:path";
@@ -9,7 +14,35 @@ function validId(id: string): boolean { return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}
 
 export class ProjectLibrary {
   private readonly writes = new Map<string, Promise<unknown>>();
-  constructor(readonly directory: string) {}
+  readonly history: ProjectHistory;
+  constructor(readonly directory: string) { this.history = new ProjectHistory(join(directory, ".history")); }
+
+  checkpoint(id: string, label: string): Promise<ProjectVersion> {
+    const task = (this.writes.get(id) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+      const content = await this.read(id);
+      if (!content) throw new Error("Project not found");
+      const version = await this.history.record(id, content, label);
+      if (!version) throw new Error("Checkpoint could not be saved");
+      return version;
+    });
+    this.writes.set(id, task);
+    void task.finally(() => { if (this.writes.get(id) === task) this.writes.delete(id); }).catch(() => undefined);
+    return task;
+  }
+
+  async restore(id: string, versionId: string, name?: string): Promise<{ id: string }> {
+    const source = deserializeTalwegFile(await this.history.read(id, versionId));
+    const scene = createSceneDoc();
+    try {
+      const newId = `doc-${randomUUID()}` as DocumentId;
+      const copy = copyBoard(source.doc, newId);
+      const requestedName = name?.trim().slice(0, 200) ?? "";
+      copy.name = requestedName.length > 0 ? requestedName : `${source.doc.name} (restored)`;
+      applyDocumentToYDoc(copy, scene);
+      await this.save(newId, serializeTalwegFile(copy, scene, source.assets));
+      return { id: newId };
+    } finally { scene.destroy(); source.ydoc.destroy(); }
+  }
 
   async scan(): Promise<LibraryIndex> {
     await mkdir(this.directory, { recursive: true });
@@ -42,6 +75,7 @@ export class ProjectLibrary {
       await writeFile(marker, "");
       try { if (entry) await unlink(join(this.directory, entry.filename)); }
       catch (error) { await unlink(marker); throw error; }
+      await this.history.purge(id);
     });
     this.writes.set(id, task);
     void task.finally(() => { if (this.writes.get(id) === task) this.writes.delete(id); }).catch(() => undefined);
@@ -80,6 +114,8 @@ export class ProjectLibrary {
         const temporary = join(this.directory, `.${id}-${randomUUID()}.tmp`);
         await writeFile(temporary, content, { flag: "wx", mode: 0o600 });
         await rename(temporary, join(this.directory, filename));
+        try { await this.history.record(id, content); }
+        catch { this.history.failures.add(id); }
         return content;
       } finally { incoming.ydoc.destroy(); }
     });

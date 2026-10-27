@@ -1,3 +1,4 @@
+import { usePreferences } from "../hooks/usePreferences.js";
 import { navigate } from "../routes/router.js";
 import {
   useEffect,
@@ -99,6 +100,7 @@ export function RichText({
   onPasteGrid,
 }: RichTextProps) {
   const { t } = useTranslation();
+  const { interfaceScale } = usePreferences();
   const canvasDocument = useNodeLinks();
   const [externalUrl, setExternalUrl] = useState("");
   const [linkError, setLinkError] = useState(false);
@@ -253,8 +255,8 @@ export function RichText({
     setSelection({
       start: prefix.toString().length,
       end: prefix.toString().length + range.toString().length,
-      x: Math.max(8, Math.min(rect.left, window.innerWidth - 310)),
-      y: rect.top > 100 ? rect.top - 90 : rect.bottom + 8,
+      x: Math.max(8, Math.min(rect.left, window.innerWidth - Math.min(300 * interfaceScale, window.innerWidth - 16) - 8)),
+      y: rect.top > 130 * interfaceScale ? rect.top - 120 * interfaceScale : rect.bottom + 8,
     });
   };
   const applyFormat = (format: Partial<Omit<TextRun, "text">>) => {
@@ -398,7 +400,7 @@ export function RichText({
             role="toolbar"
             aria-label={t("richText.selectionColor")}
             className="text-selection-toolbar"
-            style={{ left: selection.x, top: selection.y }}
+            style={{ left: selection.x / interfaceScale, top: selection.y / interfaceScale }}
             onPointerDown={(event) => {
               event.preventDefault();
               event.stopPropagation();

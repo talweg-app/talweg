@@ -6,6 +6,13 @@ describe("workspace preferences",()=>{
     expect(normalizePreferences({guestLimit:80,wheel:"unknown",grid:false})).toMatchObject({guestLimit:8,wheel:"auto",grid:false,snapToGrid:false});
     expect(normalizePreferences({guestLimit:0})).toMatchObject({guestLimit:1});
   });
+  it("bounds interface scale, ignores invalid values and rounds small steps", () => {
+    expect(normalizePreferences({ interfaceScale: 2 }).interfaceScale).toBe(1.5);
+    expect(normalizePreferences({ interfaceScale: -1 }).interfaceScale).toBe(0.8);
+    expect(normalizePreferences({ interfaceScale: 1.249999 }).interfaceScale).toBe(1.25);
+    for (const interfaceScale of [NaN, Infinity, "150%", null])
+      expect(normalizePreferences({ interfaceScale }).interfaceScale).toBe(1);
+  });
   it("preserves spaces while a participant types their name and limits its length",()=>{
     expect(normalizePreferences({displayName:"Ivan "}).displayName).toBe("Ivan ");
     expect(normalizePreferences({displayName:"x".repeat(100)}).displayName).toHaveLength(40);

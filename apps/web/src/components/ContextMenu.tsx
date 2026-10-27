@@ -1,3 +1,4 @@
+import { usePreferences } from "../hooks/usePreferences.js";
 import { freehandColor } from "../utils/freehand.js";
 import { useTheme } from "../hooks/useTheme.js";
 import {
@@ -107,6 +108,7 @@ export function ContextMenu({
   onZoomToFit,
 }: ContextMenuProps) {
   const { t } = useTranslation();
+  const { interfaceScale } = usePreferences();
   const { theme } = useTheme();
   const menuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -131,7 +133,7 @@ export function ContextMenu({
         Math.min(state.clientPoint.y, window.innerHeight - rect.height - 8),
       ),
     });
-  }, [state.clientPoint.x, state.clientPoint.y, hasSelection]);
+  }, [state.clientPoint.x, state.clientPoint.y, hasSelection, interfaceScale]);
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
@@ -216,7 +218,7 @@ export function ContextMenu({
         e.preventDefault();
         e.stopPropagation();
       }}
-      style={{ left: pos.left, top: pos.top }}
+      style={{ left: pos.left / interfaceScale, top: pos.top / interfaceScale }}
       className="canvas-context-menu"
     >
       <div className="context-heading">

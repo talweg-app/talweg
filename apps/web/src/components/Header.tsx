@@ -1,6 +1,10 @@
+import { usePreferences } from "../hooks/usePreferences.js";
+import { ProjectStorageAdapter } from "../utils/projectStorage.js";
+import { openVersionHistory } from "../utils/projectHistory.js";
+import { Clock3 } from "lucide-react";
 import { CollaborationPanel } from "./CollaborationPanel.js";
 import type { PeerState } from "../utils/peerSession.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -77,6 +81,19 @@ export function Header({
   fileSaveState = "browser",
 }: HeaderProps) {
   const { t } = useTranslation();
+  const { interfaceScale } = usePreferences();
+  const header = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const element = header.current;
+    if (!element) return;
+    const measure = () => {
+      element.style.setProperty("--canvas-header-height", `${String(element.getBoundingClientRect().height / interfaceScale)}px`);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => { observer.disconnect(); };
+  }, [interfaceScale]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -149,7 +166,7 @@ export function Header({
   const zoomPercent = Math.round((camera?.zoom ?? 1.0) * 100);
 
   return (
-    <header className="canvas-header h-12 shrink-0 border-b border-white/[0.08] bg-[#191b1c] px-3 flex items-center justify-between z-30 select-none">
+    <header ref={header} className="canvas-header h-12 shrink-0 border-b border-white/[0.08] bg-[#191b1c] px-3 flex items-center justify-between z-30 select-none">
       <div className="flex items-center gap-1 min-w-0">
         <button
           type="button"
@@ -218,6 +235,7 @@ export function Header({
             className="canvas-mode-menu absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[260px] bg-[var(--panel)] border border-[var(--panel-border)] rounded shadow-md select-none z-50 py-1"
           >
             <div className="canvas-menu-heading">{t("canvasMenu.title")}</div>
+            {document && adapter instanceof ProjectStorageAdapter && adapter.library && !document.id.startsWith("room-") && <button type="button" role="menuitem" className="canvas-menu-action" onClick={() => { setModeMenuOpen(false); openVersionHistory(document.id, document.name); }}><Clock3 size={15} /><span>{t("history.title")}</span></button>}
             <button
               type="button"
               role="menuitem"
@@ -325,7 +343,7 @@ export function Header({
           {zoomPercent}%
         </button>
 
-        <div className="h-4 w-px bg-white/[0.08] mx-0.5" />
+        <div className="canvas-header-divider h-4 w-px bg-white/[0.08] mx-0.5" />
 
         <ThemePicker compact />
         <LanguagePicker compact />

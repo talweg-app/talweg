@@ -1,5 +1,6 @@
 export interface Preferences {
   displayName: string;
+  interfaceScale: number;
   grid: boolean;
   snapToGrid: boolean;
   wheel: "auto" | "pan" | "zoom";
@@ -11,6 +12,7 @@ export interface Preferences {
 }
 export const DEFAULT_PREFERENCES: Preferences = {
   displayName: "",
+  interfaceScale: 1,
   grid: true,
   snapToGrid: false,
   wheel: "auto",
@@ -31,6 +33,8 @@ export function normalizePreferences(value: unknown): Preferences {
     "reopenLastBoard",
   ] as const)
     if (typeof input[key] === "boolean") next[key] = input[key];
+  if (typeof input.interfaceScale === "number" && Number.isFinite(input.interfaceScale))
+    next.interfaceScale = Math.max(0.8, Math.min(1.5, Math.round(input.interfaceScale * 20) / 20));
   if (typeof input.displayName === "string")
     next.displayName = input.displayName.slice(0, 40);
   if (input.wheel === "pan" || input.wheel === "zoom") next.wheel = input.wheel;

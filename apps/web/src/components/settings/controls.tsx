@@ -10,7 +10,8 @@ export function useDialogFocus(
 ) {
   useEffect(() => {
     const previous = document.activeElement;
-    ref.current?.querySelector<HTMLElement>("button, input, select")?.focus();
+    const first = ref.current?.querySelector<HTMLElement>("[data-initial-focus]") ?? ref.current?.querySelector<HTMLElement>("button, input, select");
+    first?.focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
       event.stopPropagation();
       if (event.key === "Escape") {
@@ -121,13 +122,14 @@ export function WorkspaceFolder() {
     </div>
   );
 }
-export function DisplayName() {
+export function DisplayName({ initialFocus = false }: { initialFocus?: boolean }) {
   const { t } = useTranslation();
   const prefs = usePreferences();
   return (
     <label className="settings-field">
       <span>{t("settings.displayName")}</span>
       <input
+        data-initial-focus={initialFocus || undefined}
         maxLength={40}
         value={prefs.displayName}
         placeholder={t("collaboration.guestName")}

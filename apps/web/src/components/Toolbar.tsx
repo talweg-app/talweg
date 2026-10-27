@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { usePreferences } from "../hooks/usePreferences.js";
 import {
   ArrowUpRight,
   CornerDownRight,
@@ -94,6 +96,34 @@ export function Toolbar({
   onAddMindmapSibling,
 }: ToolbarProps) {
   const { t } = useTranslation();
+  const { interfaceScale } = usePreferences();
+  const dock = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const toolbar = dock.current;
+    const pages = document.querySelector<HTMLElement>(".canvas-pages-panel");
+    const zoom = document.querySelector<HTMLElement>(".canvas-zoom-panel");
+    if (!toolbar || !pages || !zoom) return;
+    const measure = () => {
+      const tools = toolbar.getBoundingClientRect();
+      const tabs = pages.getBoundingClientRect();
+      const controls = zoom.getBoundingClientRect();
+      const crowded = tabs.right + 12 > tools.left || tools.right + 12 > controls.left;
+      document.documentElement.dataset.canvasDock = crowded ? "stacked" : "inline";
+      document.documentElement.dataset.canvasCorners = tabs.right + 12 > controls.left ? "stacked" : "inline";
+      document.documentElement.style.setProperty("--dock-zoom-height", `${String(controls.height / interfaceScale)}px`);
+      document.documentElement.style.setProperty("--dock-toolbar-height", `${String(tools.height / interfaceScale)}px`);
+    };
+    const observer = new ResizeObserver(measure);
+    for (const element of [toolbar, pages, zoom]) observer.observe(element);
+    window.addEventListener("resize", measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+      delete document.documentElement.dataset.canvasDock;
+      delete document.documentElement.dataset.canvasCorners;
+    };
+  }, [interfaceScale, mode, canBranch, hasSelection]);
 
   const shapeId =
     activeTool === "diamond" ||
@@ -147,7 +177,7 @@ export function Toolbar({
   })();
 
   return (
-    <div className="canvas-toolbar fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 p-1 bg-[#202223] border border-[#3b3e3e] rounded-xl shadow-lg select-none">
+    <div ref={dock} className="canvas-toolbar fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 p-1 bg-[#202223] border border-[#3b3e3e] rounded-xl shadow-lg select-none">
       {tools.map((tool) => {
         const Icon = tool.icon;
         return (

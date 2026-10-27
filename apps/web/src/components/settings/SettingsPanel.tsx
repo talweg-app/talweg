@@ -1,5 +1,6 @@
+import { HistorySettings } from "./HistorySettings.js";
 import { useRef, useState } from "react";
-import { X, Check, Download, Upload } from "lucide-react";
+import { X, Check, Download, Upload, Minus, Plus } from "lucide-react";
 import { usePreferences } from "../../hooks/usePreferences.js";
 import { useTranslation } from "../../hooks/useTranslation.js";
 import { useTheme } from "../../hooks/useTheme.js";
@@ -84,6 +85,17 @@ export default function SettingsPanel({
                 <div className="settings-appearance">
                   <ThemePicker />
                   <LanguagePicker compact={false} />
+                </div>
+                <div className="settings-interface-scale">
+                  <label htmlFor="interface-scale">{t("settings.interfaceScale")}</label>
+                  <div className="interface-scale-controls">
+                    <button type="button" aria-label={t("settings.smallerInterface")} disabled={prefs.interfaceScale <= 0.8} onClick={() => { updatePreferences({ interfaceScale: prefs.interfaceScale - 0.05 }); }}><Minus size={16} /></button>
+                    <input id="interface-scale" type="range" min="80" max="150" step="5" value={Math.round(prefs.interfaceScale * 100)} aria-valuetext={`${String(Math.round(prefs.interfaceScale * 100))}%`} onChange={(event) => { updatePreferences({ interfaceScale: Number(event.target.value) / 100 }); }} />
+                    <button type="button" aria-label={t("settings.largerInterface")} disabled={prefs.interfaceScale >= 1.5} onClick={() => { updatePreferences({ interfaceScale: prefs.interfaceScale + 0.05 }); }}><Plus size={16} /></button>
+                    <output htmlFor="interface-scale">{Math.round(prefs.interfaceScale * 100)}%</output>
+                    <button type="button" className="interface-scale-reset" onClick={() => { updatePreferences({ interfaceScale: 1 }); }}>{t("settings.resetScale")}</button>
+                  </div>
+                  <small>{t("settings.interfaceScaleHint")}</small>
                 </div>
                 <DisplayName />
                 <Toggle
@@ -216,6 +228,7 @@ export default function SettingsPanel({
                 <h3>{t("settings.storage")}</h3>
                 <p>{t("settings.storageHint")}</p>
                 <WorkspaceFolder />
+                <HistorySettings />
                 <div className="settings-portable">
                   <h4>{t("settings.portable")}</h4>
                   <p>{t("settings.portableHint")}</p>

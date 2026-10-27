@@ -1,3 +1,4 @@
+import { historyApi } from "./historyApi.js";
 import { ProjectLibrary } from "./projectFiles.js";
 export { ProjectLibrary } from "./projectFiles.js";
 import { resolve } from "node:path";
@@ -19,7 +20,7 @@ async function body(request: IncomingMessage): Promise<string> {
 function middleware(library: ProjectLibrary): Connect.NextHandleFunction {
   return (request, response, next) => {
     const url = new URL(request.url ?? "/", "http://localhost");
-    if (!url.pathname.startsWith("/api/projects")) { next(); return; }
+    if (!url.pathname.startsWith("/api/projects") && !url.pathname.startsWith("/api/history")) { next(); return; }
     const send = (status: number, value: unknown) => {
       response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
       response.end(typeof value === "string" ? value : JSON.stringify(value));
@@ -28,6 +29,14 @@ function middleware(library: ProjectLibrary): Connect.NextHandleFunction {
       const host = request.headers.host ?? "";
       const hostname = new URL(`http://${host}`).hostname;
       if (!["localhost", "127.0.0.1", "[::1]"].includes(hostname) || (request.headers.origin && new URL(request.headers.origin).host !== host)) { send(403, { error: "Local requests only" }); return; }
+      if (url.pathname.startsWith("/api/history")) {
+        const method = request.method ?? "GET";
+        const payload = ["POST", "PUT"].includes(method) ? await body(request) : undefined;
+        const result = await historyApi(library, new Request(url, { method, ...(payload !== undefined ? { body: payload } : {}) }));
+        response.writeHead(result.status, Object.fromEntries(result.headers));
+        response.end(await result.text());
+        return;
+      }
       if (url.pathname === "/api/projects" && request.method === "GET") { send(200, await library.scan()); return; }
       const id = decodeURIComponent(url.pathname.slice("/api/projects/".length));
       if (!validId(id)) { send(400, { error: "Invalid project id" }); return; }
@@ -35,7 +44,9 @@ function middleware(library: ProjectLibrary): Connect.NextHandleFunction {
         const content = await library.read(id);
         send(content ? 200 : 404, content ?? { error: "Project not found" });
       } else if (request.method === "PUT" && request.headers["content-type"]?.startsWith("application/json")) {
-        send(200, await library.save(id, await body(request)));
+        const content = await library.save(id, await body(request));
+        response.setHeader("X-Talweg-History-Warning", library.history.failures.has(id) ? "1" : "0");
+        send(200, content);
       } else if (request.method === "DELETE") {
         await library.delete(id); send(200, { deleted: id });
       } else { res.setHeader("Allow", "GET, PUT, DELETE"); send(405, { error: "Method not allowed" }); }

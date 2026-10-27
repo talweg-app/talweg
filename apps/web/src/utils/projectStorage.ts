@@ -11,6 +11,12 @@ async function request(path: string, options?: RequestInit): Promise<Response> {
   return fetch(`/api/projects${path}`, { ...options, cache: "no-store", signal: AbortSignal.timeout(8000) });
 }
 
+export async function flushWorkspace(): Promise<void> {
+  const pending: Promise<unknown>[] = [];
+  window.dispatchEvent(new CustomEvent("talweg:flush", { detail: { waitUntil: (promise: Promise<unknown>) => pending.push(promise) } }));
+  await Promise.all(pending);
+  await flushProjectWrites();
+}
 const openAdapters = new Set<ProjectStorageAdapter>();
 export async function flushProjectWrites(): Promise<void> {
   for (const adapter of openAdapters) {
@@ -26,6 +32,7 @@ export class ProjectStorageAdapter extends IndexedDBStorageAdapter {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private writing: Promise<void> = Promise.resolve();
   private closing = false;
+  private historyFailed = false;
   private seen = new Set<string>();
   get hasPendingWrites(): boolean { return this.pending.size > 0; }
   private remember(ids: string[]): void {
@@ -182,6 +189,7 @@ export class ProjectStorageAdapter extends IndexedDBStorageAdapter {
       }
       const response = await request(`/${encodeURIComponent(id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: serializeTalwegFile(doc, scene, assets), keepalive: false });
       if (!response.ok) throw new Error("Could not save project file");
+      this.historyFailed = response.headers.get("X-Talweg-History-Warning") === "1";
       const saved = deserializeTalwegFile(await response.text());
       try {
         this.diskVersions.set(id, uint8ArrayToBase64(Y.encodeStateAsUpdate(saved.ydoc)));
@@ -209,7 +217,7 @@ export class ProjectStorageAdapter extends IndexedDBStorageAdapter {
           return;
         }
       }
-      if (this.library) this.onState?.("library");
+      if (this.library) this.onState?.(this.historyFailed ? "history-error" : "library");
     });
     return this.writing;
   }

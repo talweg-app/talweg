@@ -1,13 +1,17 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { usePreferences } from "../hooks/usePreferences.js";
 import { Settings, X } from "lucide-react";
 import { useTranslation } from "../hooks/useTranslation.js";
 import {
   normalizePreferences,
+  readPreferences,
+  updatePreferences,
   persistClientValue,
 } from "../utils/preferences.js";
-import { flushProjectWrites } from "../utils/projectStorage.js";
+import { flushWorkspace } from "../utils/projectStorage.js";
 import { parseInvitation, rememberInvitation } from "../utils/invitation.js";
 import { navigate } from "../routes/router.js";
+const VersionHistory = lazy(() => import("./VersionHistory.js"));
 const SettingsPanel = lazy(() => import("./settings/SettingsPanel.js"));
 const FirstRun = lazy(() => import("./settings/FirstRun.js"));
 function openInvitation(text: string) {
@@ -31,7 +35,34 @@ export function SettingsTrigger() {
 }
 export function AppSettings({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const { interfaceScale } = usePreferences();
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--interface-scale", String(interfaceScale));
+    const resize = () => {
+      const width = window.innerWidth / interfaceScale;
+      root.dataset.interfaceLayout = width <= 560 ? "compact" : width <= 800 ? "medium" : "wide";
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => { window.removeEventListener("resize", resize); };
+  }, [interfaceScale]);
+  useEffect(() => {
+    const scaleKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const increase = event.code === "Equal" || event.code === "NumpadAdd" || event.key === "+";
+      const decrease = event.code === "Minus" || event.code === "NumpadSubtract" || event.key === "-";
+      const reset = event.code === "Digit0" || event.code === "Numpad0";
+      if (!increase && !decrease && !reset) return;
+      event.preventDefault();
+      event.stopPropagation();
+      updatePreferences({ interfaceScale: reset ? 1 : readPreferences().interfaceScale + (increase ? 0.05 : -0.05) });
+    };
+    window.addEventListener("keydown", scaleKey, true);
+    return () => { window.removeEventListener("keydown", scaleKey, true); };
+  }, []);
   const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState<{ id: string; name: string } | null>(null);
   const [setup, setSetup] = useState(
     () =>
       !!window.talwegDesktop &&
@@ -40,7 +71,16 @@ export function AppSettings({ children }: { children: React.ReactNode }) {
   const [saveError, setSaveError] = useState(false);
   useEffect(() => {
     const show = () => {
+      setHistory(null);
       setOpen(true);
+    };
+    const showHistory = (event: Event) => {
+      const value = (event as CustomEvent<unknown>).detail;
+      if (!value || typeof value !== "object") return;
+      const payload = value as { id?: unknown; name?: unknown };
+      if (typeof payload.id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(payload.id)) return;
+      setOpen(false);
+      setHistory({ id: payload.id, name: typeof payload.name === "string" ? payload.name : "" });
     };
     const error = () => {
       setSaveError(true);
@@ -51,10 +91,12 @@ export function AppSettings({ children }: { children: React.ReactNode }) {
         setOpen(true);
       }
     };
+    window.addEventListener("talweg:open-history", showHistory);
     window.addEventListener("talweg:open-settings", show);
     window.addEventListener("keydown", key);
     window.addEventListener("talweg:settings-save-error", error);
     return () => {
+      window.removeEventListener("talweg:open-history", showHistory);
       window.removeEventListener("talweg:open-settings", show);
       window.removeEventListener("keydown", key);
       window.removeEventListener("talweg:settings-save-error", error);
@@ -85,18 +127,7 @@ export function AppSettings({ children }: { children: React.ReactNode }) {
         setSaveError(true);
       }
     });
-    const stopClose = window.talwegDesktop.onBeforeClose(async () => {
-      const pending: Promise<unknown>[] = [];
-      window.dispatchEvent(
-        new CustomEvent("talweg:flush", {
-          detail: {
-            waitUntil: (value: Promise<unknown>) => pending.push(value),
-          },
-        }),
-      );
-      await Promise.all(pending);
-      await flushProjectWrites();
-    });
+    const stopClose = window.talwegDesktop.onBeforeClose(flushWorkspace);
     return () => {
       stop();
       stopClose();
@@ -106,6 +137,7 @@ export function AppSettings({ children }: { children: React.ReactNode }) {
     persistClientValue("talweg_welcome_complete", "1");
     setSetup(false);
   }, []);
+  const closeHistory = useCallback(() => { setHistory(null); }, []);
   const closeSettings = useCallback(() => {
     setOpen(false);
   }, []);
@@ -115,14 +147,15 @@ export function AppSettings({ children }: { children: React.ReactNode }) {
   }, []);
   return (
     <>
-      <div inert={setup || open ? true : undefined}>{children}</div>
+      <div inert={setup || open || history ? true : undefined}>{children}</div>
       <Suspense
         fallback={
           <div role="status" className="settings-backdrop">
-            {t("settings.title")}…
+            {t(history ? "history.title" : "settings.title")}…
           </div>
         }
       >
+        {history && <VersionHistory projectId={history.id} name={history.name} onClose={closeHistory} />}
         {open && <SettingsPanel onClose={closeSettings} onSetup={runSetup} />}
         {setup && <FirstRun onComplete={complete} />}
       </Suspense>
