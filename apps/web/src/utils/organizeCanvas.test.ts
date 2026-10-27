@@ -282,6 +282,27 @@ describe("organizing canvas content", () => {
     const nodes = Object.values(next.nodes).sort((a, b) => a.x - b.x);
     for (let i = 1; i < nodes.length; i++) expect((nodes[i]?.x ?? 0) - (nodes[i - 1]?.x ?? 0) - (nodes[i - 1]?.width ?? 0)).toBe(24);
   });
+  it.each([300, 900])("tidies incomplete rows with a %ipx card without overlaps or reversing their order", (wideWidth) => {
+    const document = fixture();
+    const original = document.nodes["a" as NodeId];
+    if (!original) throw new Error("Missing fixture");
+    const nodes = [
+      [0, 0, 80], [200, 0, 80], [400, 0, 80],
+      [0, 150, 80], [200, 150, 80], [400, 150, 80],
+      [0, 300, wideWidth], [400, 300, 80],
+    ].map(([x = 0, y = 0, width = 80], index) => ({ ...original, id: `cell-${String(index)}` as NodeId, x, y, width }));
+    document.nodes = Object.fromEntries(nodes.map(node => [node.id, node]));
+    document.rootNodeIds = nodes.map(node => node.id);
+    const next = alignSelection(document, new Set(document.rootNodeIds), "tidy");
+    for (const row of [[0, 1, 2], [3, 4, 5], [6, 7]]) {
+      for (let index = 1; index < row.length; index++) {
+        const previous = next.nodes[`cell-${String(row[index - 1])}` as NodeId];
+        const current = next.nodes[`cell-${String(row[index])}` as NodeId];
+        if (!previous || !current) throw new Error("Missing aligned cell");
+        expect(current.x - previous.x - previous.width).toBeGreaterThanOrEqual(24);
+      }
+    }
+  });
   it("rejects grouping across pages and handles malformed cyclic parent references", () => {
     const document = fixture();
     const b = document.nodes["b" as NodeId];

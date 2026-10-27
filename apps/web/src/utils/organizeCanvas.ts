@@ -233,16 +233,28 @@ export function alignSelection(
       const gapX = medianGap(rows.flatMap(row => row.slice(1).map((cell, index) => cell.box.x - (row[index]?.box.x ?? 0) - (row[index]?.box.width ?? 0))));
       const heights = rows.map(row => Math.max(...row.map(cell => cell.box.height)));
       const gapY = medianGap(rows.slice(1).map((row, index) => Math.min(...row.map(cell => cell.box.y)) - Math.max(...(rows[index] ?? []).map(cell => cell.box.y + cell.box.height))));
+      const baseWidth = widths.reduce((sum, value) => sum + value, 0) + gapX * (columns - 1);
+      const placements = rows.map(row => {
+        let firstColumn = 0;
+        return row.map((cell, index) => {
+          const spanning = row.length === 1 && cell.box.width >= baseWidth * .65;
+          let column = index;
+          if (row.length < columns && !spanning) {
+            const lastColumn = columns - (row.length - index);
+            column = centers.map((center, candidate) => ({ column: candidate, distance: candidate < firstColumn || candidate > lastColumn ? Infinity : Math.abs(center - cell.box.x - cell.box.width / 2) })).sort((a, b) => a.distance - b.distance)[0]?.column ?? firstColumn;
+          }
+          firstColumn = column + 1;
+          if (!spanning) widths[column] = Math.max(widths[column] ?? 0, cell.box.width);
+          return { ...cell, column, spanning };
+        });
+      });
       const width = Math.max(widths.reduce((sum, value) => sum + value, 0) + gapX * (columns - 1), ...rows.filter(row => row.length === 1).map(row => row[0]?.box.width ?? 0));
       const height = heights.reduce((sum, value) => sum + value, 0) + gapY * (rows.length - 1);
       const startX = (left + right - width) / 2;
       let y = (top + bottom - height) / 2;
-      rows.forEach((row, rowIndex) => {
-        const used = new Set<number>();
-        row.forEach(({ node, box }, index) => {
-          const column = row.length === columns ? index : centers.map((center, column) => ({ column, distance: used.has(column) ? Infinity : Math.abs(center - box.x - box.width / 2) })).sort((a, b) => a.distance - b.distance)[0]?.column ?? 0;
-          used.add(column);
-          const x = startX + (row.length === 1 && box.width >= width * .65 ? 0 : widths.slice(0, column).reduce((sum, value) => sum + value, 0) + column * gapX);
+      placements.forEach((row, rowIndex) => {
+        row.forEach(({ node, box, column, spanning }) => {
+          const x = startX + (spanning ? 0 : widths.slice(0, column).reduce((sum, value) => sum + value, 0) + column * gapX);
           positions.set(node.id, { x: node.x + x - box.x, y: node.y + y + ((heights[rowIndex] ?? box.height) - box.height) / 2 - box.y });
         });
         y += (heights[rowIndex] ?? 0) + gapY;
