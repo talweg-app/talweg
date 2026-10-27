@@ -1,3 +1,4 @@
+import { rebaseTextOffset, textOffsetRange } from "../utils/peerText.js";
 import { usePreferences } from "../hooks/usePreferences.js";
 import { navigate } from "../routes/router.js";
 import {
@@ -29,6 +30,7 @@ import {
 } from "./NodeLinks.js";
 
 interface RichTextProps {
+  field?: string;
   text: string;
   runs?: readonly TextRun[] | undefined;
   label: string;
@@ -85,6 +87,7 @@ function readRuns(element: HTMLElement): TextRun[] {
 }
 
 export function RichText({
+  field,
   text,
   runs,
   label,
@@ -121,6 +124,18 @@ export function RichText({
     if (!editor) return;
     const current = readRuns(editor);
     if (JSON.stringify(current) !== JSON.stringify(content)) {
+      const activeSelection = window.getSelection();
+      let bookmark: { start: number; end: number } | null = null;
+      if (document.activeElement === editor && activeSelection?.rangeCount) {
+        const activeRange = activeSelection.getRangeAt(0);
+        if (editor.contains(activeRange.commonAncestorContainer)) {
+          const prefix = activeRange.cloneRange(); prefix.selectNodeContents(editor); prefix.setEnd(activeRange.startContainer, activeRange.startOffset);
+          const previousText = current.map(run => run.text).join("");
+          const nextText = content.map(run => run.text).join("");
+          const start = prefix.toString().length;
+          bookmark = { start: rebaseTextOffset(previousText, nextText, start), end: rebaseTextOffset(previousText, nextText, start + activeRange.toString().length) };
+        }
+      }
       editor.replaceChildren(
         ...content
           .filter((run) => run.text)
@@ -169,28 +184,10 @@ export function RichText({
             return span;
           }),
       );
-      if (editing && selection) {
-        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-        const range = document.createRange();
-        let offset = 0;
-        let started = false;
-        let cursor = walker.nextNode();
-        while (cursor) {
-          const length = cursor.textContent?.length ?? 0;
-          if (!started && selection.start <= offset + length) {
-            range.setStart(cursor, Math.max(0, selection.start - offset));
-            started = true;
-          }
-          if (started && selection.end <= offset + length) {
-            range.setEnd(cursor, Math.max(0, selection.end - offset));
-            const selected = window.getSelection();
-            selected?.removeAllRanges();
-            selected?.addRange(range);
-            break;
-          }
-          offset += length;
-          cursor = walker.nextNode();
-        }
+      const restored = bookmark ?? (editing ? selection : null);
+      if (restored && (document.activeElement === editor || document.activeElement?.closest(".text-selection-toolbar"))) {
+        const range = textOffsetRange(editor, restored.start, restored.end);
+        const selected = window.getSelection(); selected?.removeAllRanges(); selected?.addRange(range);
       }
     }
     for (const span of editor.querySelectorAll<HTMLElement>(
@@ -290,6 +287,7 @@ export function RichText({
         aria-multiline={editing ? multiline : undefined}
         contentEditable={editing}
         suppressContentEditableWarning
+        data-presence-field={field ?? label}
         data-rich-text
         data-placeholder={placeholder}
         className={`rich-text ${className}`}

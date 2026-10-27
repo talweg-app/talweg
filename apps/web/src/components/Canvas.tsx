@@ -1,3 +1,5 @@
+import { useGesturePresence } from "../hooks/useGesturePresence.js";
+import { applyPeerPreviews, type Presence, type PresencePatch } from "../utils/collaborationPresence.js";
 import { usePreferences } from "../hooks/usePreferences.js";
 import { createFreehand } from "../utils/freehand.js";
 import { FreehandRenderer } from "./FreehandRenderer.js";
@@ -62,6 +64,8 @@ import { SelectionBox } from "./SelectionBox.js";
 import { ZoomControls } from "./ZoomControls.js";
 
 interface CanvasProps {
+  peers?: readonly Presence[];
+  onPresence?: (patch: PresencePatch) => void;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   onImportImage: (file: File | Blob, clientPoint?: Point2D) => Promise<void>;
   document: CanvasDocument | null;
@@ -140,6 +144,8 @@ function selectionTarget(
 const EMPTY_PORT_SLOTS: ReadonlyMap<string, Anchor> = new Map();
 
 export function Canvas({
+  peers = [],
+  onPresence,
   viewportRef: containerRef,
   onImportImage,
   document: storedDocument,
@@ -835,13 +841,21 @@ export function Canvas({
     ],
   );
 
+  const presenceMarquee = useMemo(() => dragState?.mode === "marquee" && dragState.currentWorld ? {
+    minX: Math.min(dragState.startWorld.x, dragState.currentWorld.x), minY: Math.min(dragState.startWorld.y, dragState.currentWorld.y),
+    maxX: Math.max(dragState.startWorld.x, dragState.currentWorld.x), maxY: Math.max(dragState.startWorld.y, dragState.currentWorld.y),
+    width: Math.abs(dragState.startWorld.x - dragState.currentWorld.x), height: Math.abs(dragState.startWorld.y - dragState.currentWorld.y),
+  } : null, [dragState]);
+  useGesturePresence(onPresence, document, dragOffsets, resizeOffsets, strokePreview, presenceMarquee);
+
   // Merge live drag and resize positions into scene for instant reactive rendering, filtered by activePageId
   const renderedDocument: CanvasDocument | null = useMemo(() => {
     if (!document) return null;
+    const remote = applyPeerPreviews(document, peers, activePageId ?? "page-1", new Set([...dragOffsets.keys(), ...(resizeOffsets ? [resizeOffsets.id] : [])]));
     const stable =
       dragOffsets.size || resizeOffsets || previewAlignment
-        ? stabilizeConnections(document)
-        : document;
+        ? stabilizeConnections(remote)
+        : remote;
     const modifiedNodes = pageNodes(stable, activePageId);
     if (previewAlignment && storedDocument) {
       const preview = worldDocument(
@@ -881,6 +895,7 @@ export function Canvas({
     };
   }, [
     document,
+    peers,
     activePageId,
     dragOffsets,
     resizeOffsets,

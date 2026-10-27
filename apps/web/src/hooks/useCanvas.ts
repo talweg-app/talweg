@@ -1,3 +1,4 @@
+import type { PresencePatch } from "../utils/collaborationPresence.js";
 import { readPreferences } from "../utils/preferences.js";
 import { stabilizeConnections } from "../utils/connectorGeometry.js";
 import { copyBoard } from "../utils/copyBoard.js";
@@ -101,6 +102,7 @@ export interface UseCanvasReturn {
   collaboration: PeerState;
   clipboardError: string;
   startHosting: () => Promise<void>;
+  updatePresence: (patch: PresencePatch) => void;
   approvePeer: (id: string, accept: boolean) => void;
   stopSharing: () => void;
   saveIndependentCopy: () => Promise<string>;
@@ -216,17 +218,14 @@ export function useCanvas(
   useEffect(() => {
     peerSessionRef.current?.setPresence({
       pageId: activePageId,
-      x: null,
-      y: null,
-      selected: [...selectedNodeIds],
+      selected: [...selectedNodeIds].slice(0, 1000),
     });
   }, [activePageId, selectedNodeIds, collaboration.phase]);
 
   const initialPageIdRef = useRef(initialPageId);
   initialPageIdRef.current = initialPageId;
 
-  const selectedIdsRef = useRef(selectedNodeIds);
-  selectedIdsRef.current = selectedNodeIds;
+  const cursorInsideRef = useRef(false);
   const mouseScreenRef = useRef<Point2D>({
     x: typeof window !== "undefined" ? window.innerWidth / 2 : 0,
     y: typeof window !== "undefined" ? window.innerHeight / 2 : 0,
@@ -242,6 +241,7 @@ export function useCanvas(
         e.clientX <= bounds.right &&
         e.clientY >= bounds.top &&
         e.clientY <= bounds.bottom;
+      cursorInsideRef.current = !!inside;
       const point = inside
         ? screenToWorld(
             { x: e.clientX, y: e.clientY },
@@ -250,17 +250,21 @@ export function useCanvas(
           )
         : null;
       peerSessionRef.current?.setPresence({
-        pageId: activePageRef.current,
         x: point?.x ?? null,
         y: point?.y ?? null,
-        selected: [...selectedIdsRef.current],
       });
     };
+    const hide = () => { cursorInsideRef.current = false; peerSessionRef.current?.setPresence({ x: null, y: null }); };
+    const leave = (event: PointerEvent) => { if (!event.relatedTarget) hide(); };
+    window.addEventListener("blur", hide);
+    window.addEventListener("pointerout", leave);
     window.addEventListener("pointermove", handlePointerMove, {
       passive: true,
     });
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("pointerout", leave);
     };
   }, []);
 
@@ -650,6 +654,15 @@ export function useCanvas(
       setSelectedNodeIds(new Set());
     }
   }, [initialPageId]);
+
+  const updatePresence = useCallback((patch: PresencePatch) => { peerSessionRef.current?.setPresence(patch); }, []);
+
+  useEffect(() => {
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds || !cursorInsideRef.current) return;
+    const point = screenToWorld(mouseScreenRef.current, camera, bounds);
+    updatePresence({ x: point.x, y: point.y });
+  }, [camera, activePageId, updatePresence]);
 
   const startHosting = useCallback(async () => {
     const scene = ydocRef.current;
@@ -1888,6 +1901,7 @@ export function useCanvas(
     collaboration,
     clipboardError,
     startHosting,
+    updatePresence,
     approvePeer: (id, accept) => {
       peerSessionRef.current?.approve(id, accept);
     },

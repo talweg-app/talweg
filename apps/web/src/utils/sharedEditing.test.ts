@@ -151,3 +151,33 @@ it("keeps the intersection of concurrently inserted rows and columns editable", 
   host.destroy();
   guest.destroy();
 });
+
+it("merges simultaneous inserts into the same label and preserves a local undo boundary", async () => {
+  const { createCanvasNode } = await import("./createCanvasNode.js");
+  const document = createBlankCanvas();
+  const node = createCanvasNode("rectangle", { x: 0, y: 0 }, "whiteboard");
+  if (node?.type !== "rectangle") throw new Error("Missing shape");
+  node.data = { label: "Shared" };
+  document.nodes[node.id] = node;
+  const host = createSceneDoc(document); upgradeSharedScene(host);
+  const guest = new Y.Doc(); Y.applyUpdate(guest, Y.encodeStateAsUpdate(host));
+  const hostNode = host.getMap<Y.Map<unknown>>(SCENE_NODES_KEY).get(node.id);
+  const guestNode = guest.getMap<Y.Map<unknown>>(SCENE_NODES_KEY).get(node.id);
+  if (!hostNode || !guestNode) throw new Error("Missing shared nodes");
+  const hostData = hostNode.get("data"), guestData = guestNode.get("data");
+  if (!(hostData instanceof Y.Map) || !(guestData instanceof Y.Map)) throw new Error("Missing shared data");
+  const undo = new Y.UndoManager(hostData, { trackedOrigins: new Set(["local"]) });
+  host.transact(() => { patchSharedMap(hostData, { label: "Shared HOST" }); }, "local");
+  guest.transact(() => { patchSharedMap(guestData, { label: "Shared GUEST" }); }, "local");
+  Y.applyUpdate(host, Y.encodeStateAsUpdate(guest), "remote");
+  Y.applyUpdate(guest, Y.encodeStateAsUpdate(host), "remote");
+  const result = yDocToDocument(host).nodes[node.id];
+  if (result?.type !== "rectangle" || !result.data) throw new Error("Missing merged shape");
+  expect(result.data.label).toContain("HOST"); expect(result.data.label).toContain("GUEST");
+  expect(yDocToDocument(guest).nodes[node.id]).toEqual(result);
+  undo.undo();
+  const undone = yDocToDocument(host).nodes[node.id];
+  if (undone?.type !== "rectangle" || !undone.data) throw new Error("Missing undone shape");
+  expect(undone.data.label).toContain("GUEST"); expect(undone.data.label).not.toContain("HOST");
+  undo.destroy(); host.destroy(); guest.destroy();
+});

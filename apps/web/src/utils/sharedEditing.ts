@@ -54,7 +54,7 @@ export function patchSharedMap(
       patchSharedMap(previous, value as Record<string, unknown>);
     else if (
       typeof value === "string" &&
-      ["note", "label", "text", "title", "content"].includes(key)
+      ["note", "label", "text", "title", "content", "description"].includes(key)
     )
       map.set(key, new Y.Text(value));
     else map.set(key, toYValue(value));
@@ -98,7 +98,7 @@ export function upgradeSharedScene(scene: Y.Doc): void {
     const data = stored.get("data");
     if (!isMap(data)) continue;
     if (node.type === "table") seedTable(data, node);
-    for (const key of ["label", "text", "title", "content"]) {
+    for (const key of ["label", "text", "title", "content", "description"]) {
       const value = data.get(key);
       if (typeof value === "string") data.set(key, new Y.Text(value));
     }

@@ -1,10 +1,21 @@
 {
   "name": "@talweg/core",
   "version": "0.1.0",
+  "description": "Camera transforms, resize geometry and scene types for infinite canvases",
+  "license": "MIT",
+  "author": "ivanchik-byte",
+  "homepage": "https://github.com/talweg-app/talweg/tree/main/packages/core",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/talweg-app/talweg.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/talweg-app/talweg/issues",
+  "keywords": ["canvas", "geometry", "camera", "diagram", "typescript"],
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": ["dist/*.js", "dist/*.js.map", "dist/*.d.ts", "dist/*.d.ts.map", "src/**/*.ts"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

@@ -314,9 +314,10 @@
     "escape": "Esc to select"
   },
   "collaboration": {
+    "editing": "editing",
     "open": "Collaborate",
     "title": "Work together",
-    "intro": "Invite up to three people. Everyone you allow can edit this board.",
+    "intro": "Invite people to this board. Everyone you allow can edit it.",
     "off": "Private board",
     "connecting": "Connecting…",
     "waiting": "Waiting for a guest",

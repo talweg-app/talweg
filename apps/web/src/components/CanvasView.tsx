@@ -1,3 +1,5 @@
+import { useEditorPresence } from "../hooks/useEditorPresence.js";
+import { RemotePresence } from "./RemotePresence.js";
 import { openVersionHistory } from "../utils/projectHistory.js";
 import { usePreferences } from "../hooks/usePreferences.js";
 import { updatePreferences } from "../utils/preferences.js";
@@ -41,6 +43,7 @@ export default function CanvasView({
     collaboration,
     clipboardError,
     startHosting,
+    updatePresence,
     approvePeer,
     stopSharing,
     saveIndependentCopy,
@@ -89,6 +92,7 @@ export default function CanvasView({
     renamePage,
     deletePage,
   } = useCanvas(documentId, pageId);
+  useEditorPresence(updatePresence);
 
   if (loadFailed && collaboration.phase !== "off")
     return (
@@ -155,6 +159,7 @@ export default function CanvasView({
     );
   }
 
+  const peers = collaboration.participants?.filter(peer => peer.id !== collaboration.selfId) ?? [];
   const selectedFirstId =
     selectedNodeIds.size > 0 ? [...selectedNodeIds][0] : undefined;
 
@@ -272,6 +277,8 @@ export default function CanvasView({
           )}
 
           <Canvas
+            peers={peers}
+            onPresence={updatePresence}
             viewportRef={viewportRef}
             onImportImage={importImage}
             document={document}
@@ -334,59 +341,7 @@ export default function CanvasView({
               {t(`clipboard.${clipboardError}`)}
             </div>
           )}
-          <div className="remote-presence-layer" aria-hidden="true">
-            {preferences.showCursors &&
-              collaboration.participants
-                ?.filter(
-                  (peer) =>
-                    peer.id !== collaboration.selfId &&
-                    peer.pageId === activePageId,
-                )
-                .map((peer) => (
-                  <div key={peer.id}>
-                    {peer.x !== null && peer.y !== null && (
-                      <div
-                        className="remote-cursor"
-                        data-testid="remote-cursor"
-                        style={{
-                          left: (peer.x + camera.x) * camera.zoom,
-                          top: (peer.y + camera.y) * camera.zoom,
-                          color: peer.color,
-                        }}
-                      >
-                        <svg width="15" height="20" viewBox="0 0 15 20">
-                          <path
-                            d="M1 1L13 12L7 13L4 18Z"
-                            fill="currentColor"
-                            stroke="var(--canvas-bg)"
-                          />
-                        </svg>
-                        <span style={{ background: peer.color }}>
-                          {peer.name}
-                        </span>
-                      </div>
-                    )}
-                    {peer.selected.map((id) => {
-                      const node = document
-                        ? worldDocument(document).nodes[id as NodeId]
-                        : undefined;
-                      return node && node.type !== "arrow" ? (
-                        <div
-                          key={id}
-                          className="remote-selection"
-                          style={{
-                            left: (node.x + camera.x) * camera.zoom,
-                            top: (node.y + camera.y) * camera.zoom,
-                            width: node.width * camera.zoom,
-                            height: node.height * camera.zoom,
-                            borderColor: peer.color,
-                          }}
-                        />
-                      ) : null;
-                    })}
-                  </div>
-                ))}
-          </div>
+          {document && <RemotePresence document={document} camera={camera} pageId={activePageId} peers={peers} showCursors={preferences.showCursors} />}
           <Toolbar
             onOpenInsert={() =>
               window.dispatchEvent(new Event("talweg:insert"))

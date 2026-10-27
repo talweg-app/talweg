@@ -1,0 +1,45 @@
+name: Bug report / Ошибка
+description: Tell us what happened and how to reproduce it.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: English or Russian is welcome. Do not include invitation links, credentials or private project data.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Include whether you use a published build or run from source.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, desktop app or browser (with version), interface scale and canvas zoom. For P2P, include host/guest roles and same/different network.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open…\n2. Select…\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots, recording or a small reproduction board
+      description: Optional. Check attachments for private content first. Keep original files if the issue affects saving.

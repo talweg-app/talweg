@@ -1,0 +1,22 @@
+name: Feature idea / Предложение
+description: Describe a workflow that could be easier.
+title: "[Idea]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: English or Russian is welcome. Describe the task and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a better result look like?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround or example
+      description: Optional. A sketch or short workflow is enough.

@@ -124,6 +124,7 @@ export function NoteEditor({
       }}
     >
       <div
+        data-presence-node={node.id}
         ref={panelRef}
         role="dialog"
         aria-modal="true"
@@ -220,6 +221,7 @@ export function NoteEditor({
         )}
         {tab === "edit" ? (
           <textarea
+            data-presence-field="note"
             ref={textareaRef}
             aria-label={t("note.body")}
             placeholder={t("note.placeholder")}

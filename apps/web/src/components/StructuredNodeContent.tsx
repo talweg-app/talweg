@@ -40,6 +40,7 @@ export function StructuredNodeContent({
       >
         <RichText
           backgroundColor={backgroundColor}
+          field="title"
           className="checklist-title"
           label={t("insert.planTitle")}
           placeholder={t("insert.planTitle")}
@@ -72,6 +73,7 @@ export function StructuredNodeContent({
                 backgroundColor={backgroundColor}
                 label={t("insert.task")}
                 placeholder={t("insert.task")}
+                field={`task:${entry.id}`}
                 text={entry.text}
                 runs={node.textRuns?.[`task:${entry.id}`]}
                 multiline={false}
@@ -209,6 +211,7 @@ export function StructuredNodeContent({
                           ? `${t("insert.column")} ${String(columnIndex + 1)}`
                           : "—"
                       }
+                      field={`cell:${String(rowIndex)}:${String(columnIndex)}`}
                       text={cell}
                       runs={
                         node.textRuns?.[

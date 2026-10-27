@@ -137,6 +137,7 @@ export function NodeRenderer({
   ) => (
     <RichText
       text={text}
+      field={field}
       runs={node.textRuns?.[field]}
       label={label}
       placeholder={label}

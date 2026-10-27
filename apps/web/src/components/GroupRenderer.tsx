@@ -48,6 +48,7 @@ export function GroupRenderer({
           <GripHorizontal size={16} />
         </button>
         <input
+          data-presence-field="group-title"
           aria-label={t("organize.groupName")}
           placeholder={t("organize.group")}
           value={typeof node.meta?.title === "string" ? node.meta.title : ""}

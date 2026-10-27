@@ -1,3 +1,5 @@
+import { validPresence, type Presence, type PresencePatch } from "./collaborationPresence.js";
+export type { Presence } from "./collaborationPresence.js";
 import { readPreferences } from "./preferences.js";
 import { FRAGMENT_PREFIX, parseFragment } from "./canvasClipboard.js";
 import * as Y from "yjs";
@@ -29,15 +31,6 @@ export type PeerPhase =
   | "full"
   | "incompatible"
   | "unavailable";
-export interface Presence {
-  id: string;
-  name: string;
-  color: string;
-  pageId: string;
-  x: number | null;
-  y: number | null;
-  selected: string[];
-}
 export interface PeerState {
   selfId?: string;
   phase: PeerPhase;
@@ -59,7 +52,7 @@ interface Control {
   sequence?: number;
   members?: Presence[];
 }
-const colors = ["#8caecc", "#83b7a3", "#cb8584", "#b09acb"];
+const colors = ["#8caecc", "#83b7a3", "#cb8584", "#b09acb", "#e0ad75", "#91b5bd", "#c7b16f", "#df9ec5", "#becd94"];
 const colorFor = (id: string) =>
   colors[
     Array.from(id, (char) => char.charCodeAt(0)).reduce(
@@ -97,6 +90,7 @@ export class PeerSession {
   private unacknowledged = new Set<number>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private presenceSent = 0;
+  private presenceTimer: ReturnType<typeof setTimeout> | undefined;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private lastSeen = new Map<string, number>();
   private readonly onUpdate = (update: Uint8Array, origin: unknown) => {
@@ -166,9 +160,11 @@ export class PeerSession {
     this.terminal = true;
     clearTimeout(this.timer);
     clearInterval(this.heartbeat);
+    clearTimeout(this.presenceTimer);
     if (phase === "ended")
       sessionStorage.setItem(`talweg-ended:${this.state.invitation.room}`, "1");
     this.phaseValue = phase;
+    this.members.clear();
     this.publishState();
     this.rejectReady(new Error(phase));
     void this.room?.leave();
@@ -347,7 +343,7 @@ export class PeerSession {
           this.members.set(peerId, {
             id: peerId,
             name: hello.name.slice(0, 40),
-            color: colorFor(peerId),
+            color: colors.find(color => ![...this.members.values()].some(member => member.color === color)) ?? colorFor(peerId),
             pageId: "page-1",
             x: null,
             y: null,
@@ -459,16 +455,10 @@ export class PeerSession {
     this.awareness.onMessage = (text, { peerId }) => {
       if (!this.accepted.has(peerId)) return;
       try {
+        if (text.length > 512 * 1024) return;
         const presence = JSON.parse(text) as Presence;
         const owner = this.state.host ? peerId : presence.id;
-        if (
-          typeof presence.pageId !== "string" ||
-          !Array.isArray(presence.selected) ||
-          presence.selected.length > 1000 ||
-          (presence.x !== null && !Number.isFinite(presence.x)) ||
-          (presence.y !== null && !Number.isFinite(presence.y))
-        )
-          return;
+        if (!validPresence(presence)) return;
         const member = this.members.get(owner);
         if (!member) return;
         this.members.set(owner, {
@@ -476,7 +466,9 @@ export class PeerSession {
           pageId: presence.pageId,
           x: presence.x,
           y: presence.y,
-          selected: presence.selected.filter((id) => typeof id === "string"),
+          selected: presence.selected,
+          gesture: presence.gesture ?? null,
+          editing: presence.editing ?? null,
         });
         this.publishState();
         if (this.state.host)
@@ -519,7 +511,10 @@ export class PeerSession {
       }
       if (packet.type === "members" && !this.state.host && packet.members) {
         for (const member of packet.members)
-          this.members.set(member.id, member);
+          if (validPresence(member)) {
+            const own = member.id === this.selfId ? this.members.get(this.selfId) : undefined;
+            this.members.set(member.id, own ? { ...own, color: member.color, name: member.name } : member);
+          }
         const active = new Set(packet.members.map((member) => member.id));
         for (const id of this.members.keys())
           if (!active.has(id)) this.members.delete(id);
@@ -544,6 +539,7 @@ export class PeerSession {
     };
     this.heartbeat = setInterval(() => {
       if (this.closed || this.terminal) return;
+      this.sendPresence();
       for (const id of this.accepted) {
         if (Date.now() - (this.lastSeen.get(id) ?? 0) > 8000) {
           this.room?.getPeers()[id]?.close();
@@ -576,7 +572,10 @@ export class PeerSession {
     if (this.state.host) {
       this.broadcastMembers();
       this.phase(this.accepted.size ? "connected" : "waiting");
-    } else if (id === this.hostId) this.phase("reconnecting");
+    } else if (id === this.hostId) {
+      for (const member of this.members.keys()) if (member !== this.selfId) this.members.delete(member);
+      this.phase("reconnecting");
+    }
   }
   private broadcastMembers() {
     void this.control?.send(
@@ -585,16 +584,23 @@ export class PeerSession {
     );
     this.publishState();
   }
-  setPresence(presence: Omit<Presence, "id" | "name" | "color">) {
+  setPresence(patch: PresencePatch) {
     const own = this.members.get(this.selfId);
-    if (!own || this.closed || this.terminal) return;
-    const next = { ...own, ...presence };
-    this.members.set(this.selfId, next);
-    if (Date.now() - this.presenceSent < 50 && next.x !== null) return;
+    if (!own || this.inactive()) return;
+    this.members.set(this.selfId, { ...own, ...patch });
+    const immediate = patch.gesture === null || patch.editing === null || patch.selected !== undefined || patch.pageId !== undefined;
+    const delay = immediate ? 0 : Math.max(0, 50 - (Date.now() - this.presenceSent));
+    if (delay) {
+      this.presenceTimer ??= setTimeout(() => { this.sendPresence(); }, delay);
+    } else this.sendPresence();
+  }
+  private sendPresence() {
+    clearTimeout(this.presenceTimer);
+    this.presenceTimer = undefined;
+    const own = this.members.get(this.selfId);
+    if (!own || this.inactive()) return;
     this.presenceSent = Date.now();
-    void this.awareness?.send(JSON.stringify(next), {
-      target: [...this.accepted],
-    });
+    void this.awareness?.send(JSON.stringify(own), { target: [...this.accepted] }).catch(() => undefined);
   }
   private async applyPacket(text: string, peerId: string) {
     if (this.closed || this.terminal || text.length > 90 * 1024 * 1024) return;
@@ -725,6 +731,7 @@ export class PeerSession {
     this.closed = true;
     clearTimeout(this.timer);
     clearInterval(this.heartbeat);
+    clearTimeout(this.presenceTimer);
     this.scene.off("update", this.onUpdate);
     for (const request of this.approvals.values()) request.resolve(false);
     this.rejectReady(new Error("Session closed"));
