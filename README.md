@@ -100,4 +100,4 @@ Talweg can be used offline for local work. Starting or joining a session contact
 | Report a problem or contribute a fix | [Contributing](CONTRIBUTING.md) |
 | Check what is in this beta candidate | [Changelog](CHANGELOG.md) |
 
-Talweg is released under the [MIT license](LICENSE).
+Talweg is released under the [MIT license](LICENSE). Maintained by [@ivanchik-byte](https://github.com/ivanchik-byte) · dev notes and updates on Telegram [@ivanchik_byte](https://t.me/ivanchik_byte).

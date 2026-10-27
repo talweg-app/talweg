@@ -81,4 +81,4 @@ P2P проверен в независимых браузерных сессия
 
 [Инструкция пользователя](docs/user-guide.ru.md) · [Документация](docs/README.md) · [Разработка](docs/development.md) · [Участие в проекте](CONTRIBUTING.md) · [Изменения](CHANGELOG.md)
 
-Лицензия [MIT](LICENSE).
+Лицензия [MIT](LICENSE). Автор: [@ivanchik-byte](https://github.com/ivanchik-byte) · заметки о разработке и обновления в Telegram [@ivanchik_byte](https://t.me/ivanchik_byte).

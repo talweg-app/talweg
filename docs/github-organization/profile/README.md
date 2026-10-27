@@ -8,6 +8,7 @@
   <a href="https://github.com/talweg-app/talweg">Explore the app</a> ·
   <a href="https://github.com/talweg-app/talweg/releases">Downloads</a> ·
   <a href="https://github.com/talweg-app/talweg/tree/main/docs">User guide</a> ·
+  <a href="https://t.me/ivanchik_byte">Telegram</a> ·
   <a href="https://github.com/talweg-app/talweg/blob/main/README.ru.md">Русский</a>
 </p>
 
@@ -34,4 +35,4 @@ The current source candidate is **0.1.0-beta.1**. See [Releases](https://github.
 
 Found something awkward? [Report a bug](https://github.com/talweg-app/talweg/issues) or describe the workflow you would like to improve. English and Russian are welcome.
 
-Open source under the [MIT license](https://github.com/talweg-app/talweg/blob/main/LICENSE).
+Open source under the [MIT license](https://github.com/talweg-app/talweg/blob/main/LICENSE). Maintained by [@ivanchik-byte](https://github.com/ivanchik-byte) · [Telegram channel](https://t.me/ivanchik_byte).
