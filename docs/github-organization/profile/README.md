@@ -27,11 +27,11 @@ Start a session, share an invitation and approve your guest. You can edit the bo
 
 ![A guest moving a service, editing its label and drawing on a shared board](../assets/collaboration.gif)
 
-Recorded in two browser sessions on one computer using a local relay. Cross-network behaviour is still being tested for beta. [How collaboration works](https://github.com/talweg-app/talweg/blob/main/docs/collaboration.md).
+Recorded in two browser sessions on one computer using a local relay. [How collaboration works](https://github.com/talweg-app/talweg/blob/main/docs/collaboration.md).
 
 ## Follow the beta
 
-The current source candidate is **0.1.0-beta.1**. See [Releases](https://github.com/talweg-app/talweg/releases) for builds that have actually been published, or [run from source](https://github.com/talweg-app/talweg#start-here).
+The first public beta is available for **Windows and Linux**. [Download the beta](https://github.com/talweg-app/talweg/releases/tag/v0.1.0-beta) or [run from source](https://github.com/talweg-app/talweg#start-here). The application version is **0.1.0-beta.1**.
 
 Found something awkward? [Report a bug](https://github.com/talweg-app/talweg/issues) or describe the workflow you would like to improve. English and Russian are welcome.
 

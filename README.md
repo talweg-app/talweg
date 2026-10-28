@@ -5,7 +5,7 @@
 <p align="center">A local workspace for diagrams, connected notes and plans.</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0--beta.1-e6df9e?style=flat-square" alt="0.1.0-beta.1 candidate" />
+  <img src="https://img.shields.io/badge/version-0.1.0--beta.1-e6df9e?style=flat-square" alt="0.1.0-beta.1" />
   <img src="https://img.shields.io/badge/desktop-Windows%20%2F%20Linux-8caecc?style=flat-square" alt="Windows and Linux" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-91b89b?style=flat-square" alt="MIT license" /></a>
 </p>
@@ -23,7 +23,14 @@ Put a diagram, a checklist and the reasoning behind them on the same board. Add 
 
 ## Start here
 
-Desktop builds target Windows and Linux. Check [Releases](https://github.com/talweg-app/talweg/releases) for published installers; the current source is a **0.1.0-beta.1 candidate**. If a build is not published yet, run it from source:
+The first public beta is available for Windows and Linux. The application version is **0.1.0-beta.1**, published under the **v0.1.0-beta** release tag.
+
+| Platform | Download |
+| --- | --- |
+| Windows x64 | [Installer (.exe)](https://github.com/talweg-app/talweg/releases/download/v0.1.0-beta/Talweg-0.1.0-beta.1-win-x64.exe) |
+| Linux x64 | [AppImage](https://github.com/talweg-app/talweg/releases/download/v0.1.0-beta/Talweg-0.1.0-beta.1-linux-x86_64.AppImage) |
+
+[Release notes and checksums](https://github.com/talweg-app/talweg/releases/tag/v0.1.0-beta). To run from source:
 
 ```bash
 git clone https://github.com/talweg-app/talweg.git
@@ -83,9 +90,9 @@ Local version history records automatic versions and named checkpoints when a wr
 
 ## Beta boundaries
 
-The beta is being prepared for Windows and Linux. macOS is deferred until we have access to a Mac for building and testing. Windows installers are currently unsigned; a successful cross-build does not replace a real Windows test.
+Windows and Linux are the current desktop targets. macOS is deferred until we have access to a Mac for building and testing. Windows installers are currently unsigned.
 
-P2P has been exercised in independent browser sessions and over a real WebRTC data channel on one computer. Connections across separate physical networks still need field testing. There are no view-only roles or persistent hosted rooms. Simultaneous edits to the same rich-text formatting or structured list can still conflict.
+Automated checks cover independent browser sessions and a real WebRTC data channel. The maintainer also completed manual Windows and P2P checks before publication. Network restrictions can still require a configured TURN service. There are no view-only roles or persistent hosted rooms. Simultaneous edits to the same rich-text formatting or structured list can still conflict.
 
 Talweg can be used offline for local work. Starting or joining a session contacts discovery or relay services; do not treat collaboration as an offline feature. Keep invitation links private because they contain session credentials.
 
@@ -98,6 +105,6 @@ Talweg can be used offline for local work. Starting or joining a session contact
 | Move projects, make backups or recover a version | [Files and recovery](docs/files-and-recovery.md) |
 | Run tests or build the desktop app | [Development](docs/development.md) |
 | Report a problem or contribute a fix | [Contributing](CONTRIBUTING.md) |
-| Check what is in this beta candidate | [Changelog](CHANGELOG.md) |
+| Check what is in this beta | [Changelog](CHANGELOG.md) |
 
 Talweg is released under the [MIT license](LICENSE). Maintained by [@ivanchik-byte](https://github.com/ivanchik-byte) · dev notes and updates on Telegram [@ivanchik_byte](https://t.me/ivanchik_byte).

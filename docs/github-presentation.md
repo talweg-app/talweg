@@ -2,7 +2,7 @@
 
 [Documentation](README.md)
 
-The README and guides are ready to travel with the repository. Publishing a release and changing repository settings are separate steps; no public release is implied by the candidate files.
+The README, guides and organization profile are published. The first beta is available under the [v0.1.0-beta tag](https://github.com/talweg-app/talweg/releases/tag/v0.1.0-beta), with application version `0.1.0-beta.1`. The settings below are the reference for maintaining the presentation.
 
 ## Repository summary
 
@@ -14,7 +14,7 @@ Suggested topics: `whiteboard`, `local-first`, `diagrams`, `mindmap`, `markdown`
 
 ## Organization overview
 
-The `talweg-app` organization and its public `.github` repository already exist. The reviewed profile is a one-line description. A complete replacement profile with its own media is prepared in [the organization kit](github-organization/README.md).
+The `talweg-app` organization and its public `.github` repository use the profile and media from [the organization kit](github-organization/README.md). Keep that kit and the separate profile repository in sync when changing the overview.
 
 Use these values in the organization’s public profile settings:
 
@@ -68,7 +68,7 @@ For an inline video player on a GitHub release, upload [collaboration.mp4](media
 
 ## Prepare a beta release
 
-1. Finish the physical Windows and cross-network collaboration checks listed in the [changelog](../CHANGELOG.md).
+1. Complete manual Windows and P2P checks for the next release, retaining the test results alongside automated checks. These checks were completed by the maintainer for the first beta.
 2. Choose the release commit and build installers from that exact source.
 3. Create the beta tag and mark the GitHub release as a pre-release.
 4. Attach the Windows installer and Linux artifacts you actually built, plus a SHA-256 checksum file.

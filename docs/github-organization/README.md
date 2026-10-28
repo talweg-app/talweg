@@ -15,7 +15,7 @@ Copy these two directories into the root of `talweg-app/.github`:
     └── collaboration.gif
 ```
 
-Merge the profile with any newer remote changes. The remote profile inspected on 27 October 2026 contains a one-line description; do not replace unrelated files or reset that repository.
+This profile is already deployed to the organization. Merge future updates with any newer remote changes; do not replace unrelated files or reset that repository.
 
 Publish the application documentation to `talweg-app/talweg` before using this profile: its guide links point to those files on `main`. The images are bundled here so the profile’s media does not depend on cross-repository raw-image URLs.
 

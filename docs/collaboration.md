@@ -59,7 +59,7 @@ Normally, Trystero discovers peers using public relays and connects them through
 
 A custom WebSocket relay selects the alternate relay transport. Board traffic then passes through that relay rather than a direct WebRTC data channel. Use `wss://` for remote relays; plain `ws://` is accepted only for loopback addresses. Leave the custom relay empty to use default discovery. Apply network settings before creating the next session.
 
-The browser test environment (`TALWEG_BROWSER_STORAGE_ONLY=1`) automatically uses its local `/talweg-relay` endpoint. The GIF and MP4 in this documentation were recorded through that path. Separate testing also established a real WebRTC data channel on one computer; two physical devices behind different networks remain a beta field-test requirement.
+The browser test environment (`TALWEG_BROWSER_STORAGE_ONLY=1`) automatically uses its local `/talweg-relay` endpoint. The GIF and MP4 in this documentation were recorded through that path. Separate automated testing also established a real WebRTC data channel. The maintainer completed manual P2P checks before publication; restricted networks may still need TURN.
 
 ## If it does not connect
 

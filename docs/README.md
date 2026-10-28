@@ -27,4 +27,4 @@ These are captures of the running application using built-in examples. The colla
 
 ## Beta status
 
-These guides describe the `0.1.0-beta.1` source candidate. Published downloads may lag behind the source. The desktop targets are Windows and Linux; macOS is deferred. See [beta limitations](../README.md#beta-boundaries) before relying on a shared session for important work.
+These guides describe `0.1.0-beta.1`, published under the [v0.1.0-beta tag](https://github.com/talweg-app/talweg/releases/tag/v0.1.0-beta). The desktop targets are Windows and Linux; macOS is deferred. See [beta limitations](../README.md#beta-boundaries) before relying on a shared session for important work.
